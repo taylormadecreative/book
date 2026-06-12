@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Project — Taylormade Creative</title>
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=Familjen+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/portal.css">
+</head>
+<body>
+
+  <nav class="pnav">
+    <a class="nav-logo" href="index.html" style="font-family: var(--font-display); font-weight:700; font-size:0.92rem; color:var(--text);">TAYLORMADE<span style="color:var(--gold);">/</span>BOOK</a>
+    <span class="hud">CLIENT PORTAL <span class="tick">/</span> PRIVATE</span>
+  </nav>
+
+  <div class="skel" id="loading">LOADING PROJECT…</div>
+
+  <!-- no/bad token -->
+  <div class="pempty" id="noAccess" hidden>
+    <div class="hud" style="margin-bottom:1rem;">SIGNAL LOST</div>
+    <h1>No project found</h1>
+    <p>This portal opens from your private project link — the one you got when you booked, or the one Nelson sent you. Check the link and try again, or start a new booking.</p>
+    <a class="btn btn-gold" href="index.html#book" style="margin-top:1rem;">Book a shoot</a>
+  </div>
+
+  <main class="pwrap" id="app" hidden>
+    <div class="banner" id="paidBanner" hidden>✓ Payment received — you're locked in. A receipt is in your email.</div>
+
+    <header class="phead">
+      <div class="hud"><span class="tick">●</span> PROJECT FILE <span id="pId"></span></div>
+      <h1 id="pTitle"></h1>
+      <span class="pill gold" id="pStatus"></span>
+    </header>
+
+    <div class="tracker" id="tracker" aria-label="Project status"></div>
+
+    <div class="pgrid">
+      <div>
+        <section class="pcard vf"><span class="vf-b"></span>
+          <h2>SHOOT <b>DETAILS</b></h2>
+          <div class="kv" id="pDetails"></div>
+        </section>
+
+        <section class="pcard">
+          <h2>INVOICES <b>&amp; PAYMENTS</b></h2>
+          <div id="pInvoices"></div>
+        </section>
+
+        <section class="pcard">
+          <h2>FILES <b>&amp; DELIVERY</b></h2>
+          <div id="pFiles"></div>
+        </section>
+      </div>
+
+      <section class="pcard">
+        <h2>MESSAGES <b>· DIRECT LINE</b></h2>
+        <div class="chat">
+          <div class="chat-scroll" id="chatScroll"></div>
+          <form class="chat-form" id="chatForm">
+            <textarea id="chatInput" placeholder="Message Nelson…" rows="1" maxlength="4000"></textarea>
+            <button class="btn btn-gold" type="submit">Send</button>
+          </form>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/portal.js"></script>
+</body>
+</html>
