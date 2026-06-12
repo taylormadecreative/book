@@ -46,9 +46,9 @@
         </div>
         <div class="newproj" id="newProj" hidden>
           <div class="bgrid">
-            <input id="npName" placeholder="Client name *">
-            <input id="npEmail" type="email" placeholder="Email *">
-            <input id="npPhone" placeholder="Phone">
+            <input id="npName" maxlength="120" placeholder="Client name *">
+            <input id="npEmail" type="email" maxlength="200" placeholder="Email *">
+            <input id="npPhone" maxlength="40" placeholder="Phone">
             <select id="npService">
               <option value="music_video">Music video</option>
               <option value="brand_content">Brand content</option>
@@ -57,7 +57,7 @@
               <option value="other">Other</option>
             </select>
             <input id="npDate" type="date">
-            <input id="npLocation" placeholder="Location">
+            <input id="npLocation" maxlength="240" placeholder="Location">
           </div>
           <div class="actions">
             <button class="btn btn-gold" id="npCreate" style="font-size:0.82rem;">Create</button>

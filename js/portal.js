@@ -9,7 +9,8 @@ const TOKEN = params.get("t");
 
 const SERVICES = {
   music_video: "Music video", brand_content: "Brand content",
-  photography: "Photography", event: "Event coverage", other: "Custom project",
+  photography: "Photography", event: "Event coverage",
+  digitals: "Digitals session", other: "Custom project",
 };
 const STATUS_LABEL = {
   new: "Inquiry received", quoted: "Quote sent", booked: "Booked",
@@ -69,10 +70,17 @@ function render(data) {
     <div><span>Call time</span><strong>${esc(p.event_time || "TBD")}</strong></div>
     <div><span>Location</span><strong>${esc(p.location || "TBD")}</strong></div>`;
 
-  // invoices
+  // invoices — skip rebuild while a checkout request is in flight (a disabled
+  // Pay button must not be replaced by a fresh enabled one mid-request)
   const money = (c) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
-  $("#pInvoices").innerHTML = data.invoices.length
-    ? data.invoices.map((inv) => `
+  const paying = sessionStorage.getItem("bk_paying");
+  if (!$("#pInvoices").querySelector("[data-pay][disabled]")) $("#pInvoices").innerHTML = data.invoices.length
+    ? data.invoices.map((inv) => {
+        if (inv.status === "paid" && inv.id === paying) sessionStorage.removeItem("bk_paying");
+        // just back from Stripe: webhook may not have landed yet — never offer
+        // a second payment on the invoice that was just paid
+        const processing = inv.status === "sent" && inv.id === paying && params.get("paid") === "1";
+        return `
       <div class="inv">
         <div>
           <div class="inv-t">${esc(inv.title)}</div>
@@ -83,9 +91,12 @@ function render(data) {
           <span class="inv-amt">${money(inv.amount_cents)}</span>
           ${inv.status === "paid"
             ? `<span class="pill green">Paid</span>`
-            : `<button class="btn btn-gold" data-pay="${inv.id}">Pay now</button>`}
+            : processing
+              ? `<span class="pill gold">Processing…</span>`
+              : `<button class="btn btn-gold" data-pay="${inv.id}">Pay now</button>`}
         </div>
-      </div>`).join("")
+      </div>`;
+      }).join("")
     : `<p style="color:var(--faint);font-size:0.9rem;margin:0;">No invoices yet — your custom quote lands here.</p>`;
 
   // files
@@ -118,6 +129,7 @@ document.addEventListener("click", async (e) => {
   if (!btn) return;
   btn.disabled = true;
   btn.textContent = "Opening…";
+  sessionStorage.setItem("bk_paying", btn.dataset.pay);
   try {
     const res = await fetch(`${BK.FUNCTIONS_BASE}/bk-create-checkout`, {
       method: "POST",

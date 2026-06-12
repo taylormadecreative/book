@@ -6,17 +6,21 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 fill=%27%2308080a%27/%3E%3Cpath d=%27M5 12V5h7M20 5h7v7M27 20v7h-7M12 27H5v-7%27 stroke=%27%23e9b949%27 stroke-width=%273%27 fill=%27none%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%274%27 fill=%27%23e9b949%27/%3E%3C/svg%3E">
   <script>document.documentElement.classList.add("js");</script>
   <title>Book a Shoot — Taylormade Creative · Photo &amp; Video, Dallas–Fort Worth</title>
-  <meta name="description" content="Direct-booked photography and video production. Music videos, brand content, commercials, and photography — shot like cinema, booked and delivered in one place.">
+  <meta name="description" content="Direct-booked photography and video production. Music videos, brand content, commercials, photography, and $100 digitals. Shot like cinema, booked and delivered in one place.">
   <meta property="og:title" content="Book a Shoot — Taylormade Creative">
   <meta property="og:description" content="Photography and video production, shot like cinema. Book your shoot, pay your deposit, and track your project in one place.">
   <meta property="og:image" content="https://taylormadecreative.github.io/book/assets/img/toni-guy-editorial.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=Familjen+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800;900&family=Familjen+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/index.css">
 </head>
 <body>
+
+  <!-- custom cursor (desktop, fine pointer only) -->
+  <div class="cursor-dot" id="cursorDot" aria-hidden="true"></div>
+  <div class="cursor-ring" id="cursorRing" aria-hidden="true"></div>
 
   <!-- nav -->
   <nav class="nav">
@@ -26,25 +30,30 @@
       <a href="#work">Work</a>
       <a href="#stills">Stills</a>
       <a href="#services">Services</a>
-      <a href="#process">Process</a>
+      <a href="#digitals">Digitals</a>
       <a href="portal.html">Client portal</a>
-      <a class="btn btn-gold" href="#book">Book a shoot</a>
+      <a class="btn btn-gold" href="#book" data-magnetic>Book a shoot</a>
     </div>
   </nav>
 
   <!-- hero -->
   <header class="hero" id="top">
+    <span class="hero-ghost" aria-hidden="true">CINEMA</span>
     <div class="hero-copy">
-      <div class="hud">
+      <div class="hud hero-hud">
         <span class="rec">Now booking</span>
         <span>DFW <span class="tick">/</span> shooting everywhere</span>
         <span id="timecode">00:00:00:00</span>
       </div>
-      <h1>Your brand,<br>shot like <span class="gold">cinema.</span></h1>
-      <p class="hero-sub">I direct, shoot, and edit films and photography for brands and artists. Booking, payments, messages, and delivery all live right here — one link, start to wrap.</p>
+      <h1>
+        <span class="hl-line"><span>Your brand,</span></span>
+        <span class="hl-line"><span>shot like</span></span>
+        <span class="hl-line"><span class="gold">cinema.</span></span>
+      </h1>
+      <p class="hero-sub">I direct, shoot, and edit films and photography for brands and artists. Booking, payments, messages, and delivery all live right here: one link, start to wrap.</p>
       <div class="hero-ctas">
-        <a class="btn btn-gold" href="#book">Book a shoot</a>
-        <a class="btn btn-ghost" href="#work">See the work</a>
+        <a class="btn btn-gold" href="#book" data-magnetic>Book a shoot</a>
+        <a class="btn btn-ghost" href="#digitals" data-magnetic>Digitals · $100</a>
       </div>
       <div class="hero-meta">
         <div><strong>14 yrs</strong><span>creative direction</span></div>
@@ -52,14 +61,15 @@
         <div><strong>FX6 + A7RV</strong><span>Sony cinema rig</span></div>
       </div>
     </div>
-    <div class="hero-frame vf">
+    <div class="hero-frame vf" id="heroFrame">
       <span class="vf-b"></span>
-      <img src="assets/img/toni-guy-editorial.jpg" alt="Editorial campaign photograph shot for TONI&amp;GUY" fetchpriority="high">
+      <img src="assets/img/toni-guy-editorial.jpg" alt="Editorial campaign photograph shot for TONI&amp;GUY" fetchpriority="high" id="heroImg">
       <div class="tc-overlay">
         <span class="hud">A-CAM <span class="tick">●</span> 4K</span>
         <span class="hud">TONI&amp;GUY — EDITORIAL</span>
       </div>
     </div>
+    <a class="scroll-cue hud" href="#work" aria-label="Scroll to work">SCROLL <i></i></a>
   </header>
 
   <!-- client marquee -->
@@ -71,76 +81,109 @@
 
   <!-- video work -->
   <section class="section" id="work">
-    <div class="section-head rv">
-      <div class="hud">SEQ 01 <span class="tick">/</span> MOTION</div>
+    <div class="section-head">
+      <div class="hud"><span class="tick">●</span> MOTION REEL</div>
       <h2>Selected <span class="gold">films</span></h2>
-      <p>Music videos, commercials, event films, and brand campaigns. Press play — this is the actual delivered work.</p>
+      <p>Music videos, commercials, event films, and brand campaigns. Press play. This is the actual delivered work.</p>
     </div>
     <div class="section-inner">
       <div class="work-grid" id="workGrid"></div>
     </div>
   </section>
 
-  <!-- stills filmstrip -->
+  <!-- stills filmstrip (pinned scrub on desktop) -->
   <section id="stills">
-    <div class="section-head rv" style="padding: 0 clamp(1.1rem, 4vw, 3rem);">
-      <div class="hud">SEQ 02 <span class="tick">/</span> STILLS</div>
+    <div class="section-head" style="padding: 0 clamp(1.1rem, 4vw, 3rem);">
+      <div class="hud"><span class="tick">●</span> STILLS</div>
       <h2>Photography</h2>
-      <p>Campaign, product, beauty, and editorial photography for brands that need to look expensive.</p>
+      <p>Campaign, product, beauty, and editorial photography for brands that need to look expensive. Tap any frame.</p>
     </div>
-    <div class="strip-wrap rv">
+    <div class="strip-wrap" id="stripWrap">
       <div class="strip" id="stillStrip"></div>
     </div>
   </section>
 
   <!-- services -->
   <section class="section" id="services">
-    <div class="section-head rv">
-      <div class="hud">SEQ 03 <span class="tick">/</span> SERVICES</div>
+    <div class="section-head">
+      <div class="hud"><span class="tick">●</span> SERVICES</div>
       <h2>What I <span class="gold">shoot</span></h2>
     </div>
     <div class="section-inner svc-rows">
-      <div class="svc rv">
+      <div class="svc" data-preview="assets/img/fashion-22.jpg">
         <div><div class="svc-num">SRV—01</div><h3>Music videos</h3></div>
-        <p class="svc-desc">Concept to final cut. Direction, cinematography, edit, and color — cinematic visuals built around your record, your look, and your rollout.</p>
+        <p class="svc-desc">Concept to final cut. Direction, cinematography, edit, and color: cinematic visuals built around your record, your look, and your rollout.</p>
         <div class="svc-tags"><span class="pill">Direction</span><span class="pill">4K cinema</span><span class="pill">Color grade</span></div>
       </div>
-      <div class="svc rv">
+      <div class="svc" data-preview="assets/img/takis-graphic.jpg">
         <div><div class="svc-num">SRV—02</div><h3>Brand content<br>&amp; commercials</h3></div>
         <p class="svc-desc">Product films, promos, event coverage, and ad creative that actually sells. Built for the feed and shot like a campaign.</p>
         <div class="svc-tags"><span class="pill">Commercials</span><span class="pill">Events</span><span class="pill">Social cuts</span></div>
       </div>
-      <div class="svc rv">
+      <div class="svc" data-preview="assets/img/konjo-1.jpg">
         <div><div class="svc-num">SRV—03</div><h3>Photography</h3></div>
-        <p class="svc-desc">Campaign, product, beauty, and editorial stills. The same cinematic eye, frozen — shot on a Sony A7RV with full retouch.</p>
+        <p class="svc-desc">Campaign, product, beauty, and editorial stills. The same cinematic eye, frozen: shot on a Sony A7RV with full retouch.</p>
         <div class="svc-tags"><span class="pill">Campaign</span><span class="pill">Product</span><span class="pill">Editorial</span></div>
       </div>
+      <div class="svc" data-preview="assets/img/sports-portrait.jpg">
+        <div><div class="svc-num">SRV—04</div><h3>Digitals</h3></div>
+        <p class="svc-desc">Clean, professional digitals for models, artists, and creators. One flat rate, booked and paid in about a minute. No quote cycle.</p>
+        <div class="svc-tags"><span class="pill gold">$100 flat</span><span class="pill">Same-week slots</span></div>
+      </div>
+      <img class="svc-preview" id="svcPreview" alt="" aria-hidden="true">
+    </div>
+  </section>
+
+  <!-- digitals: instant booking band -->
+  <section class="digitals" id="digitals">
+    <div class="digitals-inner">
+      <div class="digitals-copy">
+        <div class="hud ink"><span class="tick">●</span> INSTANT BOOKING</div>
+        <h2>Digitals.<br><span class="price">$100 flat.</span></h2>
+        <p>Polished, agency-ready digitals: shot clean, lit right, delivered fast. Book the slot, pay on the spot, done. The whole thing takes about a minute.</p>
+        <ul class="digitals-points">
+          <li>Pro lighting, clean looks, full set of digitals</li>
+          <li>Book now, pay securely right here</li>
+          <li>Your private project portal, instantly</li>
+        </ul>
+      </div>
+      <form class="digitals-form" id="digitalsForm" novalidate>
+        <div class="field"><label for="dgName">Name *</label><input type="text" id="dgName" maxlength="120" autocomplete="name" required></div>
+        <div class="field"><label for="dgEmail">Email *</label><input type="email" id="dgEmail" maxlength="200" autocomplete="email" required></div>
+        <div class="dgrid">
+          <div class="field"><label for="dgPhone">Phone</label><input type="tel" id="dgPhone" maxlength="40" autocomplete="tel"></div>
+          <div class="field"><label for="dgDate">Preferred date</label><input type="date" id="dgDate"></div>
+        </div>
+        <div class="berr ink" id="dgErr" role="alert"></div>
+        <button class="btn btn-ink" type="submit" id="dgBtn" data-magnetic>Book digitals — $100</button>
+        <span class="hud ink small">YOU'LL PAY SECURELY IN YOUR PROJECT PORTAL</span>
+      </form>
     </div>
   </section>
 
   <!-- process -->
   <section class="section" id="process" style="background: var(--bg-2);">
-    <div class="section-head rv">
-      <div class="hud">SEQ 04 <span class="tick">/</span> HOW IT WORKS</div>
+    <div class="section-head">
+      <div class="hud"><span class="tick">●</span> HOW IT WORKS</div>
       <h2>Booked in <span class="gold">four moves</span></h2>
     </div>
     <div class="section-inner steps">
-      <div class="step rv"><h3>Tell me the vision</h3><p>Drop the details below — what we're shooting, when, and where. You'll get a private project portal the second you hit send.</p></div>
-      <div class="step rv"><h3>Quote &amp; deposit</h3><p>I'll reply in your portal with a custom quote. A 50% deposit, paid right on this site, locks your date on my calendar.</p></div>
-      <div class="step rv"><h3>Shoot day</h3><p>I show up with the cinema rig and we make something worth posting. Balance is settled day-of, through your portal.</p></div>
-      <div class="step rv"><h3>Delivery</h3><p>Edited, graded, and delivered to your portal — typically inside two weeks, with two rounds of revisions included.</p></div>
+      <div class="step"><h3>Tell me the vision</h3><p>Drop the details below: what we're shooting, when, and where. You'll get a private project portal the second you hit send.</p></div>
+      <div class="step"><h3>Quote &amp; deposit</h3><p>I'll reply in your portal with a custom quote. A 50% deposit, paid right on this site, locks your date on my calendar.</p></div>
+      <div class="step"><h3>Shoot day</h3><p>I show up with the cinema rig and we make something worth posting. Balance is settled day-of, through your portal.</p></div>
+      <div class="step"><h3>Delivery</h3><p>Edited, graded, and delivered to your portal: typically inside two weeks, with two rounds of revisions included.</p></div>
     </div>
   </section>
 
   <!-- booking -->
   <section class="section book" id="book">
-    <div class="section-head rv" style="text-align:center;">
-      <div class="hud" style="justify-content:center;"><span class="rec">REC</span> &nbsp;BOOKING SEQUENCE</div>
+    <div class="section-head" style="text-align:center;">
+      <div class="hud" style="justify-content:center;"><span class="rec">REC</span> &nbsp;BOOKING</div>
       <h2>Start your <span class="gold">booking</span></h2>
-      <p style="margin-left:auto;margin-right:auto;">Three quick steps. No account, no back-and-forth email chains — your project portal is created instantly.</p>
+      <p style="margin-left:auto;margin-right:auto;">Three quick steps. No account, no back-and-forth email chains. Your project portal is created instantly.</p>
     </div>
 
-    <div class="book-shell rv vf"><span class="vf-b"></span>
+    <div class="book-shell vf"><span class="vf-b"></span>
       <form id="bookForm" novalidate>
         <div class="book-progress">
           <span class="hud">STEP <span class="tick" id="stepNow">01</span>/03</span>
@@ -158,6 +201,7 @@
             <button type="button" data-v="event"><b>Event coverage</b><span>Launches &amp; shows</span></button>
             <button type="button" data-v="other"><b>Something else</b><span>Let's talk about it</span></button>
           </div>
+          <p class="hint">Just need digitals? <a href="#digitals">Book the $100 flat session instead</a>.</p>
           <div class="bnav">
             <span></span>
             <button type="button" class="btn btn-gold" id="next1" disabled>Next</button>
@@ -179,8 +223,8 @@
                 <option>Not sure yet</option>
               </select>
             </div>
-            <div class="field wide"><label for="fLocation">Location</label><input type="text" id="fLocation" placeholder="City, venue, or 'need help finding one'"></div>
-            <div class="field wide"><label for="fDetails">The vision</label><textarea id="fDetails" placeholder="Tell me about the project — references, mood, deliverables you need…"></textarea></div>
+            <div class="field wide"><label for="fLocation">Location</label><input type="text" id="fLocation" maxlength="240" placeholder="City, venue, or 'need help finding one'"></div>
+            <div class="field wide"><label for="fDetails">The vision</label><textarea id="fDetails" maxlength="4000" placeholder="Tell me about the project: references, mood, deliverables you need…"></textarea></div>
           </div>
           <div class="bnav">
             <button type="button" class="btn btn-ghost" data-back>Back</button>
@@ -192,10 +236,10 @@
         <fieldset class="bstep" data-step="3">
           <h3>Where do I reach you?</h3>
           <div class="bgrid">
-            <div class="field"><label for="fName">Name *</label><input type="text" id="fName" autocomplete="name" required></div>
-            <div class="field"><label for="fEmail">Email *</label><input type="email" id="fEmail" autocomplete="email" required></div>
-            <div class="field"><label for="fPhone">Phone</label><input type="tel" id="fPhone" autocomplete="tel"></div>
-            <div class="field"><label for="fCompany">Brand / artist name</label><input type="text" id="fCompany"></div>
+            <div class="field"><label for="fName">Name *</label><input type="text" id="fName" maxlength="120" autocomplete="name" required></div>
+            <div class="field"><label for="fEmail">Email *</label><input type="email" id="fEmail" maxlength="200" autocomplete="email" required></div>
+            <div class="field"><label for="fPhone">Phone</label><input type="tel" id="fPhone" maxlength="40" autocomplete="tel"></div>
+            <div class="field"><label for="fCompany">Brand / artist name</label><input type="text" id="fCompany" maxlength="160"></div>
             <div class="field wide"><label for="fSource">How'd you find me?</label>
               <select id="fSource">
                 <option value="">Select…</option>
@@ -219,10 +263,50 @@
       <div class="book-done" id="bookDone" hidden>
         <span class="hud"><span class="tick">●</span> INQUIRY RECEIVED</span>
         <div class="big">That's a wrap on step one.</div>
-        <p>Your private project portal is live — quotes, payments, messages, and final delivery all happen there. Bookmark it; I'll hit you back there shortly.</p>
+        <p>Your private project portal is live: quotes, payments, messages, and final delivery all happen there. Bookmark it; I'll hit you back there shortly.</p>
         <a class="portal-link" id="portalLink" href="#" target="_blank" rel="noopener"></a>
         <a class="btn btn-gold" id="portalBtn" href="#" target="_blank" rel="noopener">Open your portal</a>
       </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="section" id="faq">
+    <div class="section-head">
+      <div class="hud"><span class="tick">●</span> QUESTIONS</div>
+      <h2>Before you <span class="gold">ask</span></h2>
+    </div>
+    <div class="section-inner faq-list">
+      <details>
+        <summary>How fast do I get my files?<i></i></summary>
+        <div class="faq-body"><p>Typically inside two weeks of the shoot, delivered straight to your project portal. Two rounds of revisions are included on every project.</p></div>
+      </details>
+      <details>
+        <summary>How does payment work?<i></i></summary>
+        <div class="faq-body"><p>A 50% deposit locks your date; the balance is settled on shoot day. Everything is paid securely through your portal. Digitals are a flat $100, paid when you book.</p></div>
+      </details>
+      <details>
+        <summary>Do you travel?<i></i></summary>
+        <div class="faq-body"><p>Based in Dallas–Fort Worth, shooting everywhere. Tell me where the shoot is in your inquiry and we'll sort the logistics in your portal.</p></div>
+      </details>
+      <details>
+        <summary>What do you shoot on?<i></i></summary>
+        <div class="faq-body"><p>Sony FX6 for cinema work and a Sony A7RV for stills and hybrid sets. Pro lighting and full post: edit, color grade, and retouch.</p></div>
+      </details>
+      <details>
+        <summary>How do quotes work if there's no pricing here?<i></i></summary>
+        <div class="faq-body"><p>Every project is scoped to what you actually need. Send the inquiry, and a custom quote lands in your private portal, usually same day.</p></div>
+      </details>
+    </div>
+  </section>
+
+  <!-- closing peak -->
+  <section class="outro">
+    <span class="outro-ghost" aria-hidden="true">TAYLORMADE</span>
+    <div class="outro-inner">
+      <div class="hud"><span class="rec">Now booking</span></div>
+      <h2>Let's <span class="gold">shoot.</span></h2>
+      <a class="btn btn-gold btn-big" href="#book" data-magnetic>Book a shoot</a>
     </div>
   </section>
 
@@ -240,6 +324,7 @@
       </div>
       <div class="footer-links">
         <a href="portal.html">Client portal</a>
+        <a href="#digitals">Digitals · $100</a>
         <a href="#book">Book a shoot</a>
         <a href="admin.html" style="color: var(--faint);">Studio access</a>
       </div>
@@ -250,7 +335,18 @@
     </div>
   </footer>
 
+  <!-- lightbox -->
+  <div class="lightbox" id="lightbox" hidden>
+    <button class="lightbox-close" id="lightboxClose" aria-label="Close">✕</button>
+    <figure class="vf"><span class="vf-b"></span>
+      <img id="lightboxImg" src="" alt="">
+      <figcaption class="hud" id="lightboxCap"></figcaption>
+    </figure>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" defer></script>
   <script src="js/config.js"></script>
-  <script src="js/site.js"></script>
+  <script src="js/site.js" defer></script>
 </body>
 </html>

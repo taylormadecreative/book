@@ -201,3 +201,9 @@ body { font-size: 15px; }
   transition: transform 0.35s var(--ease);
 }
 .toast.show { transform: translateX(-50%) translateY(0); }
+
+/* mobile back-to-pipeline */
+.back-list { display: none; }
+@media (max-width: 960px) {
+  .back-list { display: inline-flex; }
+}

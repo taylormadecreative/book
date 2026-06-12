@@ -8,7 +8,7 @@ const esc = (s) => (s ?? "").toString().replace(/[&<>"]/g, (c) => ({ "&": "&amp;
 const money = (c) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 const fmtD = (d) => d ? new Date(d.length === 10 ? d + "T12:00:00" : d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
 
-const SERVICES = { music_video: "Music video", brand_content: "Brand content", photography: "Photography", event: "Event", other: "Other" };
+const SERVICES = { music_video: "Music video", brand_content: "Brand content", photography: "Photography", event: "Event", digitals: "Digitals", other: "Other" };
 const STATUSES = ["new", "quoted", "booked", "in_production", "delivered", "archived", "lost"];
 const SLABEL = { new: "New", quoted: "Quoted", booked: "Booked", in_production: "Production", delivered: "Delivered", archived: "Archived", lost: "Lost" };
 
@@ -60,7 +60,45 @@ async function load() {
   renderList();
   if (state.sel) {
     const p = state.projects.find((x) => x.id === state.sel);
-    if (p) renderDetail(p, true);
+    // never re-render the detail pane while Nelson is typing in it —
+    // a rebuild would wipe half-typed notes, replies, and invoice fields
+    const ae = document.activeElement;
+    const typing = ae && $("#dpane").contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
+    if (p && !typing) renderDetail(p, true);
+  }
+}
+
+/* preserve form values + focus across detail re-renders */
+const FORM_IDS = ["noteBox", "achatInput", "invTitle", "invAmt", "invKind", "fileLabel", "fileUrl"];
+function captureForms() {
+  const ae = document.activeElement;
+  const saved = {};
+  FORM_IDS.forEach((id) => { const el = document.getElementById(id); if (el) saved[id] = el.value; });
+  return {
+    saved,
+    serverNote: document.getElementById("noteBox")?.defaultValue,
+    focusId: ae && FORM_IDS.includes(ae.id) ? ae.id : null,
+    selStart: ae?.selectionStart, selEnd: ae?.selectionEnd,
+  };
+}
+function restoreForms(cap) {
+  if (!cap) return;
+  FORM_IDS.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el || cap.saved[id] == null) return;
+    if (id === "noteBox") {
+      // restore unsaved typing only (typed value differs from the server copy it started from)
+      if (cap.serverNote != null && cap.saved[id] !== cap.serverNote) el.value = cap.saved[id];
+    } else if (cap.saved[id] !== "") {
+      el.value = cap.saved[id];
+    }
+  });
+  if (cap.focusId) {
+    const el = document.getElementById(cap.focusId);
+    if (el) {
+      el.focus();
+      try { el.setSelectionRange(cap.selStart, cap.selEnd); } catch (_) { /* selects/numbers */ }
+    }
   }
 }
 
@@ -120,6 +158,10 @@ $("#plist").addEventListener("click", (e) => {
   const p = state.projects.find((x) => x.id === state.sel);
   renderDetail(p);
   markRead(p);
+  // stacked mobile layout: the detail pane renders below the fold — go to it
+  if (window.matchMedia("(max-width: 960px)").matches) {
+    $("#dpane").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 });
 
 async function markRead(p) {
@@ -137,6 +179,7 @@ function portalUrl(p) {
 
 function renderDetail(p, keepScroll = false) {
   const pane = $("#dpane");
+  const formCap = keepScroll ? captureForms() : null;
   const chatBox = keepScroll ? $("#achatScroll")?.scrollTop : null;
   const inv = p.bk_invoices.sort((a, b) => a.created_at.localeCompare(b.created_at));
   const msgs = p.bk_messages.sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -149,6 +192,7 @@ function renderDetail(p, keepScroll = false) {
         <h2>${esc(p.client_name)}${p.company ? ` — ${esc(p.company)}` : ""}</h2>
       </div>
       <div class="dactions">
+        <button class="btn btn-ghost back-list" id="backList">← Pipeline</button>
         <select id="statusSel">${STATUSES.map((s) => `<option value="${s}" ${p.status === s ? "selected" : ""}>${SLABEL[s]}</option>`).join("")}</select>
         <button class="btn btn-ghost" id="copyPortal">Copy portal link</button>
       </div>
@@ -233,6 +277,7 @@ function renderDetail(p, keepScroll = false) {
   if (keepScroll && chatBox != null && $("#achatScroll")) $("#achatScroll").scrollTop = chatBox;
   else if ($("#achatScroll")) $("#achatScroll").scrollTop = $("#achatScroll").scrollHeight;
 
+  restoreForms(formCap);
   wireDetail(p);
 }
 
@@ -249,6 +294,10 @@ function wireDetail(p) {
     toast("Portal link copied — text it to the client");
   });
 
+  $("#backList").addEventListener("click", () => {
+    document.querySelector(".lpane").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
   $("#invCreate").addEventListener("click", async () => {
     const title = $("#invTitle").value.trim() || "Invoice";
     const amt = Math.round(parseFloat($("#invAmt").value) * 100);
@@ -258,6 +307,7 @@ function wireDetail(p) {
       line_items: [{ label: title, amount_cents: amt }],
     });
     if (error) { toast("Invoice failed"); return; }
+    $("#invTitle").value = ""; $("#invAmt").value = "";
     toast("Invoice sent — visible in client portal");
     await load();
   });
@@ -298,6 +348,7 @@ function wireDetail(p) {
     const label = $("#fileLabel").value.trim(), url = $("#fileUrl").value.trim();
     if (!label || !/^https?:\/\//.test(url)) { toast("Need a label and a full https:// link"); return; }
     await sb.from("bk_files").insert({ project_id: p.id, label, url });
+    $("#fileLabel").value = ""; $("#fileUrl").value = "";
     toast("File added — live in portal"); await load();
   });
   $("#dpane").querySelectorAll("[data-file-del]").forEach((b) => b.addEventListener("click", async () => {
