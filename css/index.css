@@ -386,6 +386,7 @@ body.menu-open .nav-burger span:nth-child(2) { top: 19px; transform: rotate(-45d
   transform: scaleX(0.33);
   transition: transform 0.5s var(--ease);
 }
+fieldset.bstep { border: 0; padding: 0; margin: 0; min-width: 0; }
 .bstep { display: none; }
 .bstep.active { display: block; animation: stepin 0.45s var(--ease); }
 @keyframes stepin { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }

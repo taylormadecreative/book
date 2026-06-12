@@ -200,9 +200,9 @@ body::after {
 .pill.green { color: var(--green); border-color: rgba(87, 217, 163, 0.35); background: rgba(87, 217, 163, 0.08); }
 .pill.red { color: var(--red); border-color: rgba(255, 92, 92, 0.35); background: rgba(255, 92, 92, 0.07); }
 
-/* reveal on scroll */
-.rv { opacity: 0; transform: translateY(26px); transition: opacity 0.7s var(--ease), transform 0.7s var(--ease); }
-.rv.in { opacity: 1; transform: none; }
+/* reveal on scroll — only hidden when JS is running (html.js set inline in <head>) */
+html.js .rv { opacity: 0; transform: translateY(26px); transition: opacity 0.7s var(--ease), transform 0.7s var(--ease); }
+html.js .rv.in { opacity: 1; transform: none; }
 
 /* a11y */
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
