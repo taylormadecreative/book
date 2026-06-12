@@ -739,6 +739,7 @@ fieldset.bstep { border: 0; padding: 0; margin: 0; min-width: 0; }
   place-items: center;
   padding: 4vh 4vw;
 }
+.lightbox[hidden] { display: none; }
 .lightbox figure {
   margin: 0;
   max-width: min(900px, 92vw);
