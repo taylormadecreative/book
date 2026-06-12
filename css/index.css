@@ -727,6 +727,7 @@ fieldset.bstep { border: 0; padding: 0; margin: 0; min-width: 0; }
   margin: 1rem 0 2rem;
   line-height: 1;
 }
+.outro h2 .gold { color: var(--gold); }
 .btn-big { font-size: 1.1rem; padding: 1.1em 2.6em; }
 
 /* lightbox */
