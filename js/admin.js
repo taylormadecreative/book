@@ -356,7 +356,15 @@ function safeName(name) {
   return (name || "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
 }
 
+const MAX_UPLOAD_BYTES = 600 * 1024 * 1024; // 600MB per file
+
 async function uploadToGallery(p, galleryId, files) {
+  const tooBig = files.filter((f) => f.size > MAX_UPLOAD_BYTES);
+  if (tooBig.length) {
+    toast(`${tooBig.length} file${tooBig.length === 1 ? " is" : "s are"} over 600MB — skipped. Compress and retry.`);
+    files = files.filter((f) => f.size <= MAX_UPLOAD_BYTES);
+  }
+  if (!files.length) return;
   const prog = $(`[data-prog="${galleryId}"]`);
   state.uploading = true;
   let done = 0, failed = 0;

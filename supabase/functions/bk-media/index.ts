@@ -30,7 +30,11 @@ async function resolveAccess(req: Request, body: any, db: ReturnType<typeof svc>
   }
   const auth = req.headers.get("Authorization") || "";
   const jwt = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (jwt && jwt !== Deno.env.get("SUPABASE_ANON_KEY")) {
+  // Only treat the bearer as a user session if it is shaped like a JWT (header.payload.sig).
+  // The publishable key (sb_publishable_…) and legacy anon key are NOT user sessions and
+  // must never be run through getUser as if they were.
+  const looksLikeJwt = jwt.split(".").length === 3;
+  if (looksLikeJwt) {
     const anon = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!);
     const { data: u } = await anon.auth.getUser(jwt);
     const user = u?.user;
@@ -108,7 +112,8 @@ Deno.serve(async (req: Request) => {
         .select("id, project_id, gallery_id, selected").eq("id", body.item_id).maybeSingle();
       if (!item || !allow(item.project_id)) return json({ error: "not_found" }, 404);
       const { data: gal } = await db.from("bk_galleries")
-        .select("kind, locked, selection_limit").eq("id", item.gallery_id).single();
+        .select("kind, locked, selection_limit").eq("id", item.gallery_id).maybeSingle();
+      if (!gal) return json({ error: "not_found" }, 404);
       if (gal.kind !== "proof") return json({ error: "not_selectable" }, 409);
       if (gal.locked) return json({ error: "locked" }, 409);
       const want = body.selected === true;
@@ -130,9 +135,15 @@ Deno.serve(async (req: Request) => {
         .select("id, project_id, kind, locked, title").eq("id", body.gallery_id).maybeSingle();
       if (!gal || !allow(gal.project_id)) return json({ error: "not_found" }, 404);
       if (gal.kind !== "proof") return json({ error: "not_selectable" }, 409);
+      // idempotent: once submitted it stays locked — never re-message (blocks thread spam)
+      if (gal.locked) return json({ error: "already_submitted" }, 409);
       const { data: picks } = await db.from("bk_gallery_items").select("filename").eq("gallery_id", gal.id).eq("selected", true);
-      await db.from("bk_galleries").update({ locked: true }).eq("id", gal.id);
       const n = (picks || []).length;
+      if (n === 0) return json({ error: "no_selection" }, 409);
+      // lock only if still open (guards a concurrent double-submit race)
+      const { data: locked } = await db.from("bk_galleries")
+        .update({ locked: true }).eq("id", gal.id).eq("locked", false).select("id");
+      if (!locked || !locked.length) return json({ error: "already_submitted" }, 409);
       await db.from("bk_messages").insert({
         project_id: gal.project_id, sender: "client",
         body: `Selected ${n} image${n === 1 ? "" : "s"} for editing from "${gal.title}". Ready when you are.`,
