@@ -31,8 +31,18 @@ async function init() {
     render(data);
     $("#loading").hidden = true;
     $("#app").hidden = false;
+    mountMedia();
     setInterval(refresh, 10000);
   } catch (_) { fail(); }
+}
+
+/* photos & video — mounted once, via the same token that gates this portal */
+function mountMedia() {
+  if (!window.BKGallery) return;
+  const root = $("#galleryRoot");
+  if (!root) return;
+  $("#mediaCard").hidden = false;
+  BKGallery.mount(root, { mode: "token", project_id: PID, token: TOKEN });
 }
 
 function fail() {

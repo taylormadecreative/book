@@ -52,7 +52,7 @@ async function boot() {
 async function load() {
   const { data, error } = await sb
     .from("bk_projects")
-    .select("*, bk_invoices(*), bk_messages(*), bk_files(*)")
+    .select("*, bk_invoices(*), bk_messages(*), bk_files(*), bk_galleries(*, bk_gallery_items(*))")
     .order("updated_at", { ascending: false });
   if (error) { toast("Load failed — are you signed in as admin?"); return; }
   state.projects = data || [];
@@ -60,11 +60,11 @@ async function load() {
   renderList();
   if (state.sel) {
     const p = state.projects.find((x) => x.id === state.sel);
-    // never re-render the detail pane while Nelson is typing in it —
-    // a rebuild would wipe half-typed notes, replies, and invoice fields
+    // never re-render the detail pane while Nelson is typing or uploading —
+    // a rebuild would wipe half-typed fields or interrupt an upload
     const ae = document.activeElement;
     const typing = ae && $("#dpane").contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
-    if (p && !typing) renderDetail(p, true);
+    if (p && !typing && !state.uploading) renderDetail(p, true);
   }
 }
 
@@ -272,13 +272,117 @@ function renderDetail(p, keepScroll = false) {
           </div>
         </div>
       </div>
-    </div>`;
+    </div>
+    ${galleriesCard(p)}`;
 
   if (keepScroll && chatBox != null && $("#achatScroll")) $("#achatScroll").scrollTop = chatBox;
   else if ($("#achatScroll")) $("#achatScroll").scrollTop = $("#achatScroll").scrollHeight;
 
   restoreForms(formCap);
   wireDetail(p);
+  hydrateThumbs();
+}
+
+/* ---------------- galleries (photos & video) ---------------- */
+const GAL_KIND = { proof: "Proofing", final: "Edited photos", video: "Video" };
+
+function galleriesCard(p) {
+  const gals = (p.bk_galleries || []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const blocks = gals.length ? gals.map((g) => {
+    const items = (g.bk_gallery_items || []).slice()
+      .sort((a, b) => (a.sort - b.sort) || a.created_at.localeCompare(b.created_at));
+    const sel = items.filter((i) => i.selected).length;
+    const isVideo = g.kind === "video";
+    const meta = g.kind === "proof"
+      ? `<span class="pill ${sel ? "gold" : ""}">${sel} selected${g.selection_limit != null ? ` / ${g.selection_limit}` : ""}</span>`
+      : `<span class="pill">${items.length} item${items.length === 1 ? "" : "s"}</span>`;
+    const lockBtn = g.kind === "proof"
+      ? `<button class="ga-lock" data-lock="${g.id}" data-on="${g.locked}">${g.locked ? "Locked" : "Open"}</button>` : "";
+    const cells = isVideo
+      ? items.map((it) => `
+          <div class="ga-vrow" data-path="${esc(it.storage_path)}">
+            <span class="ga-fn">${esc(it.filename || "Video")}</span>
+            <button class="ga-itemdel" data-itemdel="${it.id}" title="Remove">&#10005;</button>
+          </div>`).join("")
+      : items.map((it) => `
+          <figure class="ga-cell ${it.selected ? "sel" : ""}" data-path="${esc(it.storage_path)}">
+            <img alt="${esc(it.filename || "")}" data-ph>
+            ${it.selected ? `<span class="ga-tick">&#10003;</span>` : ""}
+            <button class="ga-itemdel" data-itemdel="${it.id}" title="Remove">&#10005;</button>
+          </figure>`).join("");
+    return `
+      <div class="ga">
+        <div class="ga-head">
+          <div><span class="hud">${GAL_KIND[g.kind] || g.kind}</span><b>${esc(g.title)}</b></div>
+          <div class="ga-meta">${meta}${lockBtn}<button class="ga-del" data-galdel="${g.id}" title="Delete gallery">&#10005;</button></div>
+        </div>
+        <div class="${isVideo ? "ga-vlist" : "ga-grid"}">
+          ${cells}
+          <label class="ga-add">
+            <input type="file" multiple accept="${isVideo ? "video/*" : "image/*"}" data-upload="${g.id}" hidden>
+            <span>&#43; Upload</span>
+          </label>
+        </div>
+        <div class="ga-prog" data-prog="${g.id}" hidden></div>
+      </div>`;
+  }).join("") : `<p style="color:var(--faint);font-size:0.85rem;margin:0 0 1rem;">No galleries yet. Create one below — proofing lets the client pick shots; finals and video are for delivery.</p>`;
+
+  return `
+    <div class="acard ga-card">
+      <h3>GALLERIES <b>· PHOTOS &amp; VIDEO</b></h3>
+      ${blocks}
+      <div class="ga-new">
+        <select id="galKind">
+          <option value="proof">Proofing (client picks)</option>
+          <option value="final">Edited photos</option>
+          <option value="video">Video</option>
+        </select>
+        <input id="galTitle" placeholder="Gallery title">
+        <input id="galLimit" type="number" min="1" placeholder="Pick limit (optional)">
+        <button class="btn btn-gold" id="galCreate" style="font-size:0.82rem;">New gallery</button>
+      </div>
+    </div>`;
+}
+
+async function hydrateThumbs() {
+  const cells = [...$("#dpane").querySelectorAll("[data-path] img[data-ph]")];
+  if (!cells.length) return;
+  const paths = cells.map((img) => img.closest("[data-path]").dataset.path);
+  const { data } = await sb.storage.from("project-media").createSignedUrls(paths, 3600);
+  (data || []).forEach((d, i) => { if (d.signedUrl) cells[i].src = d.signedUrl; });
+}
+
+function safeName(name) {
+  return (name || "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
+}
+
+async function uploadToGallery(p, galleryId, files) {
+  const prog = $(`[data-prog="${galleryId}"]`);
+  state.uploading = true;
+  let done = 0, failed = 0;
+  const total = files.length;
+  const show = () => { if (prog) { prog.hidden = false; prog.textContent = `Uploading ${done}/${total}${failed ? ` (${failed} failed)` : ""}…`; } };
+  show();
+  // find current max sort in this gallery
+  const gal = (p.bk_galleries || []).find((g) => g.id === galleryId);
+  let sort = ((gal?.bk_gallery_items || []).reduce((m, i) => Math.max(m, i.sort), 0)) + 1;
+  for (const file of files) {
+    const key = `${p.id}/${galleryId}/${crypto.randomUUID()}-${safeName(file.name)}`;
+    const up = await sb.storage.from("project-media").upload(key, file, {
+      contentType: file.type || "application/octet-stream", upsert: false,
+    });
+    if (up.error) { failed++; done++; show(); continue; }
+    const ins = await sb.from("bk_gallery_items").insert({
+      gallery_id: galleryId, project_id: p.id, storage_path: key,
+      filename: file.name, content_type: file.type, size_bytes: file.size, sort: sort++,
+    });
+    if (ins.error) { failed++; }
+    done++; show();
+  }
+  state.uploading = false;
+  if (prog) prog.hidden = true;
+  toast(failed ? `${total - failed} uploaded, ${failed} failed` : `${total} uploaded — live for the client`);
+  await load();
 }
 
 function wireDetail(p) {
@@ -353,6 +457,51 @@ function wireDetail(p) {
   });
   $("#dpane").querySelectorAll("[data-file-del]").forEach((b) => b.addEventListener("click", async () => {
     await sb.from("bk_files").delete().eq("id", b.dataset.fileDel);
+    await load();
+  }));
+
+  /* galleries */
+  const galCreate = $("#galCreate");
+  if (galCreate) galCreate.addEventListener("click", async () => {
+    const kind = $("#galKind").value;
+    const title = $("#galTitle").value.trim() || GAL_KIND[kind];
+    const limRaw = $("#galLimit").value.trim();
+    const row = { project_id: p.id, kind, title };
+    if (kind === "proof" && limRaw) row.selection_limit = Math.max(1, parseInt(limRaw, 10) || 0);
+    const { error } = await sb.from("bk_galleries").insert(row);
+    if (error) { toast("Could not create gallery"); return; }
+    $("#galTitle").value = ""; $("#galLimit").value = "";
+    toast(`${GAL_KIND[kind]} gallery created`);
+    await load();
+  });
+
+  $("#dpane").querySelectorAll("[data-upload]").forEach((inp) =>
+    inp.addEventListener("change", () => {
+      if (inp.files && inp.files.length) uploadToGallery(p, inp.dataset.upload, [...inp.files]);
+    }));
+
+  $("#dpane").querySelectorAll("[data-itemdel]").forEach((b) => b.addEventListener("click", async () => {
+    const cell = b.closest("[data-path]");
+    if (cell) await sb.storage.from("project-media").remove([cell.dataset.path]);
+    await sb.from("bk_gallery_items").delete().eq("id", b.dataset.itemdel);
+    await load();
+  }));
+
+  $("#dpane").querySelectorAll("[data-lock]").forEach((b) => b.addEventListener("click", async () => {
+    const on = b.dataset.on !== "true";
+    await sb.from("bk_galleries").update({ locked: on }).eq("id", b.dataset.lock);
+    toast(on ? "Proofing locked" : "Proofing reopened");
+    await load();
+  }));
+
+  $("#dpane").querySelectorAll("[data-galdel]").forEach((b) => b.addEventListener("click", async () => {
+    const gid = b.dataset.galdel;
+    const gal = (p.bk_galleries || []).find((g) => g.id === gid);
+    if (!confirm(`Delete "${gal?.title || "this gallery"}" and all its media? This cannot be undone.`)) return;
+    const paths = (gal?.bk_gallery_items || []).map((i) => i.storage_path);
+    if (paths.length) await sb.storage.from("project-media").remove(paths);
+    await sb.from("bk_galleries").delete().eq("id", gid); // cascades item rows
+    toast("Gallery deleted");
     await load();
   }));
 }

@@ -1,0 +1,189 @@
+/* ============================================================
+   gallery.css — client proofing / finals / video (shared)
+   ============================================================ */
+
+.g-loading, .g-empty {
+  color: var(--faint);
+  font-size: 0.92rem;
+  padding: 1.2rem 0;
+}
+.g-loading { letter-spacing: 0.2em; }
+
+.g-project-title {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  text-transform: uppercase;
+  margin: 2.4rem 0 0.4rem;
+  color: var(--text);
+}
+
+.g-block { margin-bottom: 2.6rem; }
+.g-block-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.g-block-head h3 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin: 0.35rem 0 0;
+}
+
+/* photo grid (proof + final) */
+.g-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+.g-cell {
+  position: relative;
+  margin: 0;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: var(--bg-3);
+  border: 1px solid var(--line-soft);
+}
+.g-cell img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  cursor: zoom-in;
+  transition: transform 0.5s var(--ease), opacity 0.3s var(--ease);
+}
+.g-cell:hover img { transform: scale(1.04); }
+.g-cell.sel { border-color: var(--gold); box-shadow: inset 0 0 0 3px var(--gold); }
+
+/* proof pick button */
+.g-pick {
+  position: absolute;
+  top: 8px; right: 8px;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(244, 241, 234, 0.7);
+  background: rgba(8, 8, 10, 0.5);
+  color: transparent;
+  font-size: 0.85rem;
+  display: grid;
+  place-items: center;
+  transition: all 0.2s var(--ease);
+  backdrop-filter: blur(4px);
+}
+.g-pick:active { transform: scale(0.9); }
+.g-cell.sel .g-pick {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #0a0903;
+}
+
+/* final download chip */
+.g-cell-dl {
+  position: absolute;
+  bottom: 8px; right: 8px;
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: rgba(8, 8, 10, 0.62);
+  border: 1px solid var(--line);
+  color: var(--gold);
+  font-size: 1rem;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity 0.25s var(--ease), background 0.25s var(--ease);
+  backdrop-filter: blur(4px);
+}
+.g-cell:hover .g-cell-dl { opacity: 1; }
+.g-cell-dl:hover { background: var(--gold); color: #0a0903; }
+@media (hover: none) { .g-cell-dl { opacity: 1; } }
+
+/* selection bar */
+.g-selbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line-soft);
+}
+.g-count {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.g-selnote { font-size: 0.82rem; color: var(--muted); }
+
+/* video */
+.g-videos { display: grid; gap: 1.2rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.g-video { background: var(--bg-3); border: 1px solid var(--line-soft); }
+.g-video video { width: 100%; display: block; background: #000; aspect-ratio: 16 / 9; object-fit: contain; }
+.g-video-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.8rem 0.9rem;
+}
+.g-fn { font-size: 0.85rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-dl { padding: 0.5em 1.1em; font-size: 0.82rem; flex: 0 0 auto; }
+
+/* toast */
+.g-toast {
+  position: fixed;
+  bottom: 1.4rem; left: 50%;
+  transform: translateX(-50%) translateY(140%);
+  background: var(--bg-3);
+  border: 1px solid var(--gold);
+  color: var(--text);
+  padding: 0.7rem 1.3rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  z-index: 600;
+  transition: transform 0.35s var(--ease);
+}
+.g-toast.show { transform: translateX(-50%) translateY(0); }
+
+/* lightbox */
+.g-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 700;
+  background: rgba(8, 8, 10, 0.95);
+  display: grid;
+  place-items: center;
+  padding: 4vh 4vw;
+}
+.g-lightbox[hidden] { display: none; }
+.g-lightbox img { max-width: 100%; max-height: 84vh; object-fit: contain; }
+.g-lb-close {
+  position: absolute;
+  top: 1.2rem; right: 1.4rem;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 1rem;
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
+}
+.g-lb-close:hover { border-color: var(--gold); color: var(--gold); }
+.g-lb-cap {
+  position: absolute;
+  bottom: 1.4rem; left: 0; right: 0;
+  text-align: center;
+}
+
+/* portal media card (full-width under the grid) */
+.media-card { margin-top: 0; }
+.media-login {
+  margin: 1.6rem 0 0;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--line-soft);
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.media-login a { text-decoration: underline; text-underline-offset: 3px; }

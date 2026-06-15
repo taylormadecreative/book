@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 fill=%27%2308080a%27/%3E%3Cpath d=%27M5 12V5h7M20 5h7v7M27 20v7h-7M12 27H5v-7%27 stroke=%27%23e9b949%27 stroke-width=%273%27 fill=%27none%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%274%27 fill=%27%23e9b949%27/%3E%3C/svg%3E">
+  <title>Your Gallery — Taylormade Creative</title>
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=Familjen+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/portal.css">
+  <link rel="stylesheet" href="css/gallery.css">
+</head>
+<body>
+  <nav class="pnav">
+    <a class="nav-logo" href="index.html" style="font-family:var(--font-display);font-weight:700;font-size:0.92rem;color:var(--text);">TAYLORMADE<span style="color:var(--gold);">/</span>BOOK</a>
+    <span style="display:flex;align-items:center;gap:1rem;">
+      <span class="hud" id="who"></span>
+      <button class="btn btn-ghost" id="signout" style="padding:0.5em 1.2em;font-size:0.82rem;">Sign out</button>
+    </span>
+  </nav>
+
+  <div class="skel" id="loading">CHECKING YOUR SESSION…</div>
+
+  <main class="pwrap" id="app" hidden>
+    <header class="phead">
+      <div class="hud"><span class="tick">●</span> YOUR MEDIA</div>
+      <h1>Photos &amp; Video</h1>
+      <p style="color:var(--muted);max-width:46ch;">Pick the shots you want edited, watch them come back finished, and download your video — all in one place.</p>
+    </header>
+    <div id="galleryRoot"></div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/gallery-core.js"></script>
+  <script src="js/gallery.js"></script>
+</body>
+</html>

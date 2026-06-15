@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 fill=%27%2308080a%27/%3E%3Cpath d=%27M5 12V5h7M20 5h7v7M27 20v7h-7M12 27H5v-7%27 stroke=%27%23e9b949%27 stroke-width=%273%27 fill=%27none%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%274%27 fill=%27%23e9b949%27/%3E%3C/svg%3E">
+  <title>Client Login — Taylormade Creative</title>
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=Familjen+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/portal.css">
+  <style>
+    .login-shell { max-width: 420px; margin: 12vh auto 0; padding: 0 1.2rem; }
+    .login-shell h1 { font-family: var(--font-display); font-weight: 800; text-transform: uppercase; font-size: 1.7rem; margin: 0.6rem 0 0.5rem; line-height: 1.1; }
+    .login-shell h1 .gold { color: var(--gold); }
+    .login-shell p.sub { color: var(--muted); font-size: 0.95rem; margin: 0 0 1.8rem; }
+    .login-card { background: var(--bg-2); border: 1px solid var(--line); padding: 1.6rem; }
+    .login-card .field { margin-bottom: 1rem; }
+    .login-card .btn { width: 100%; }
+    .login-err { color: var(--red); font-size: 0.85rem; min-height: 1.3em; margin-top: 0.7rem; }
+    .login-ok { color: var(--green); font-size: 0.9rem; margin-top: 0.7rem; line-height: 1.5; }
+    .login-alt { margin-top: 1.4rem; font-size: 0.85rem; color: var(--muted); text-align: center; }
+    .login-alt a { text-decoration: underline; text-underline-offset: 3px; }
+    .login-back { display: inline-block; margin-top: 2rem; color: var(--faint); font-size: 0.8rem; }
+    .step { display: none; }
+    .step.on { display: block; animation: fade 0.4s var(--ease); }
+    @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; } }
+  </style>
+</head>
+<body>
+  <nav class="pnav">
+    <a class="nav-logo" href="index.html" style="font-family:var(--font-display);font-weight:700;font-size:0.92rem;color:var(--text);">TAYLORMADE<span style="color:var(--gold);">/</span>BOOK</a>
+    <span class="hud">CLIENT LOGIN <span class="tick">/</span> SECURE</span>
+  </nav>
+
+  <main class="login-shell">
+    <div class="hud"><span class="tick">●</span> YOUR PROJECTS</div>
+    <h1>Log in to view your <span class="gold">photos &amp; video</span></h1>
+    <p class="sub">Use the email you booked with. We'll send a secure one-tap link — no password to remember.</p>
+
+    <div class="login-card">
+      <!-- step: email -->
+      <form class="step on" id="emailStep">
+        <div class="field"><label for="email">Email</label><input type="email" id="email" autocomplete="email" required placeholder="you@email.com"></div>
+        <button class="btn btn-gold" type="submit" id="sendBtn">Send my login link</button>
+        <div class="login-err" id="err1"></div>
+      </form>
+
+      <!-- step: sent -->
+      <div class="step" id="sentStep">
+        <div class="login-ok" id="sentMsg"></div>
+        <div class="login-alt">
+          Got a 6-digit code instead? <a href="#" id="showCode">Enter it here</a>
+        </div>
+      </div>
+
+      <!-- step: code fallback -->
+      <form class="step" id="codeStep">
+        <div class="field"><label for="code">6-digit code</label><input type="text" id="code" inputmode="numeric" maxlength="6" placeholder="······"></div>
+        <button class="btn btn-gold" type="submit" id="verifyBtn">Verify &amp; log in</button>
+        <div class="login-err" id="err2"></div>
+      </form>
+    </div>
+
+    <a class="login-back" href="index.html">← Back to taylormade/book</a>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/login.js"></script>
+</body>
+</html>
