@@ -1,7 +1,7 @@
 # TAYLORMADE / BOOK
 
 Direct booking site + HoneyBook replacement for Taylormade Creative photo & video.
-Live: **https://taylormadecreative.github.io/book/**
+Live: **https://book.taylormadecreative.net/** (custom subdomain via Squarespace DNS → GitHub Pages; the old `taylormadecreative.github.io/book/` auto-redirects here).
 
 ## The surfaces
 

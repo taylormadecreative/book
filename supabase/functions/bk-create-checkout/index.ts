@@ -18,7 +18,7 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-const SITE_BASE = "https://taylormadecreative.github.io/book";
+const SITE_BASE = "https://book.taylormadecreative.net";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
