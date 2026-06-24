@@ -46,6 +46,17 @@ Deno.serve(async (req: Request) => {
     if (inv.status !== "sent") return json({ error: "not_payable" }, 409);
 
     const stripe = new Stripe(key);
+
+    // Reuse an existing open session instead of minting a second payable one —
+    // closes the double-payment window between redirect and webhook.
+    if (inv.stripe_session_id) {
+      try {
+        const existing = await stripe.checkout.sessions.retrieve(inv.stripe_session_id);
+        if (existing.payment_status === "paid") return json({ error: "already_paid" }, 409);
+        if (existing.status === "open" && existing.url) return json({ url: existing.url });
+      } catch (_) { /* expired or invalid — fall through and create fresh */ }
+    }
+
     const portalUrl = `${SITE_BASE}/portal.html?p=${inv.bk_projects.id}&t=${token}`;
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
