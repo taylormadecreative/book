@@ -3,6 +3,12 @@
 Direct booking site + HoneyBook replacement for Taylormade Creative photo & video.
 Live: **https://book.taylormadecreative.net/** (custom subdomain via Squarespace DNS → GitHub Pages; the old `taylormadecreative.github.io/book/` auto-redirects here).
 
+## Hosting & deploys
+
+- **Domain:** `book` CNAME in Squarespace DNS → `taylormadecreative.github.io`. HTTPS enforced (GitHub-issued cert).
+- **Deploys:** GitHub **Actions** (`.github/workflows/deploy-pages.yml`), not the legacy Jekyll builder. The legacy builder 0-duration-fails whenever a `CNAME` file is present on this repo, so Pages `build_type` is set to `workflow`. Just `git push` to `main` and the workflow publishes. (Ignore the `status: errored` field in the Pages REST API — it's the frozen legacy-builder status and no longer used.)
+- **Client login** depends on the subdomain being in Supabase → Auth → URL Configuration → Redirect URLs (`https://book.taylormadecreative.net/**`).
+
 ## The surfaces
 
 | URL | What it is |
