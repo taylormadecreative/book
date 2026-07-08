@@ -1,6 +1,8 @@
-// bk-create-checkout — creates a Stripe Checkout session for a booking invoice.
+// bk-create-checkout — creates (or reuses) a Stripe Checkout session for a booking invoice.
 // Auth model: anonymous callers must present the project's access_token (same
 // token that gates the client portal). verify_jwt is disabled for that reason.
+// v8: optional return_url (whitelisted to Taylormade domains) so the new
+// www.taylormadecreative.net booking flow can land on its own success page.
 // Deployed to Supabase project pgqdmnmessbbzyszjfvr.
 import Stripe from "npm:stripe@17";
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -19,12 +21,18 @@ function json(body: unknown, status = 200): Response {
 }
 
 const SITE_BASE = "https://book.taylormadecreative.net";
+const ALLOWED_RETURN_PREFIXES = [
+  "https://www.taylormadecreative.net/",
+  "https://taylormadecreative.net/",
+  "https://taylormadecreative.github.io/",
+  "https://book.taylormadecreative.net/",
+];
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
   try {
-    const { invoice_id, token } = await req.json();
+    const { invoice_id, token, return_url } = await req.json();
     if (!invoice_id || !token) return json({ error: "bad_request" }, 400);
 
     const key = Deno.env.get("STRIPE_SECRET_KEY");
@@ -58,6 +66,18 @@ Deno.serve(async (req: Request) => {
     }
 
     const portalUrl = `${SITE_BASE}/portal.html?p=${inv.bk_projects.id}&t=${token}`;
+    let successUrl = `${portalUrl}&paid=1`;
+    let cancelUrl = portalUrl;
+    if (
+      typeof return_url === "string" &&
+      ALLOWED_RETURN_PREFIXES.some((p) => return_url.startsWith(p)) &&
+      return_url.length <= 600
+    ) {
+      const sep = return_url.includes("?") ? "&" : "?";
+      successUrl = `${return_url}${sep}paid=1`;
+      cancelUrl = `${return_url}${sep}cancelled=1`;
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer_email: inv.bk_projects.client_email,
@@ -74,8 +94,8 @@ Deno.serve(async (req: Request) => {
         },
       ],
       metadata: { invoice_id: inv.id, project_id: inv.bk_projects.id },
-      success_url: `${portalUrl}&paid=1`,
-      cancel_url: portalUrl,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
     });
 
     await sb.from("bk_invoices").update({ stripe_session_id: session.id }).eq("id", inv.id);
