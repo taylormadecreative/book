@@ -128,7 +128,11 @@ function renderConfirmation(ctx: Ctx, amountCents: number | null): { subject: st
       ["Location", b.location ? esc(b.location) : "We'll confirm the exact spot with you before the shoot"],
       ...(amountCents ? [["Paid", money(amountCents)] as [string, string]] : []),
     ]) +
-    p(`<b>What happens next:</b> a few days before your shoot you'll get a prep email with exactly how to show up ready, and a reminder the day before. Questions in the meantime? Your client portal has everything — messages, receipts, and your delivery when it's ready.`) +
+    p(`<b>What happens next:</b> a few days before your shoot you'll get a prep email with exactly how to show up ready, and a reminder the day before.${
+      ctx.project?.service === "photography"
+        ? " After the shoot, your proofs land in your private portal — you pick exactly which shots you want edited, and the finals come back the same way."
+        : " Questions in the meantime? Your client portal has everything — messages, receipts, and your delivery when it's ready."
+    }`) +
     btn(portalUrl(ctx), "OPEN YOUR CLIENT PORTAL"),
   );
   return { subject, html };
