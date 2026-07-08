@@ -78,6 +78,12 @@ Deno.serve(async (req: Request) => {
       cancelUrl = `${return_url}${sep}cancelled=1`;
     }
 
+    // the buyer's own name doesn't belong in the product string — prefer the
+    // invoice's first line item ("Digitals Session · Jul 10, 2026 2:00 PM")
+    const lineTitle =
+      (Array.isArray(inv.line_items) && inv.line_items[0]?.title) ||
+      `${inv.title} — ${inv.bk_projects.title ?? "Taylormade Creative"}`;
+
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer_email: inv.bk_projects.client_email,
@@ -85,9 +91,7 @@ Deno.serve(async (req: Request) => {
         {
           price_data: {
             currency: "usd",
-            product_data: {
-              name: `${inv.title} — ${inv.bk_projects.title ?? "Taylormade Creative"}`,
-            },
+            product_data: { name: lineTitle },
             unit_amount: inv.amount_cents,
           },
           quantity: 1,
