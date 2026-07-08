@@ -188,6 +188,38 @@ function renderInquiryAck(ctx: Ctx): { subject: string; html: string } {
   return { subject, html };
 }
 
+function renderInvoiceSent(
+  ctx: Ctx,
+  inv: { title: string; amount_cents: number; due_date: string | null } | null,
+): { subject: string; html: string } {
+  const amt = inv ? money(inv.amount_cents) : "";
+  const subject = `Your quote is ready${amt ? " — " + amt : ""} · Taylormade Creative`;
+  const html = shell(subject,
+    h1(`Your quote is ready, ${firstName(ctx)}.`) +
+    p(`I put together the numbers for <b>${esc(ctx.project?.title ?? "your project")}</b>. Everything is itemized in your private portal, and you can pay securely by card right there — no accounts, no apps.`) +
+    detailCard([
+      ["Invoice", esc(inv?.title ?? "Invoice")],
+      ["Amount", amt],
+      ...(inv?.due_date ? [["Due", inv.due_date] as [string, string]] : []),
+    ]) +
+    p(`If anything about the scope or numbers needs adjusting, just reply to this email — we'll get it right before you pay a cent.`) +
+    btn(portalUrl(ctx), "REVIEW & PAY IN YOUR PORTAL"),
+  );
+  return { subject, html };
+}
+
+function renderNewMessage(ctx: Ctx): { subject: string; html: string } {
+  const snippet = String(ctx.payload?.snippet ?? "");
+  const subject = `New message from Taylormade Creative`;
+  const html = shell(subject,
+    h1(`You've got a message, ${firstName(ctx)}.`) +
+    detailCard([["Nelson", `<span style="font-weight:normal;line-height:1.7;">${esc(snippet)}${snippet.length >= 200 ? "…" : ""}</span>`]]) +
+    p(`Reply in your portal and it comes straight to me.`) +
+    btn(portalUrl(ctx), "READ & REPLY IN YOUR PORTAL"),
+  );
+  return { subject, html };
+}
+
 function renderNelsonAlert(ctx: Ctx): { subject: string; html: string } {
   const pl = ctx.payload ?? {};
   const pj = ctx.project;
@@ -296,6 +328,26 @@ Deno.serve(async (req: Request) => {
         case "prep": rendered = renderPrep(ctx); to = project!.client_email; break;
         case "reminder": rendered = renderReminder(ctx); to = project!.client_email; break;
         case "inquiry_ack": rendered = renderInquiryAck(ctx); to = project!.client_email; break;
+        case "invoice_sent": {
+          if (!project) throw new Error("missing project");
+          const invId = String((row.payload as Record<string, unknown>)?.invoice_id ?? "");
+          const { data: qInv } = await db.from("bk_invoices")
+            .select("title, amount_cents, due_date, status")
+            .eq("id", invId).maybeSingle();
+          if (!qInv || qInv.status !== "sent") {
+            // paid or voided before the email went out — nothing to ask for
+            await db.from("bk_email_queue").update({
+              sent_at: new Date().toISOString(),
+              last_error: `skipped: invoice ${qInv?.status ?? "missing"}`,
+            }).eq("id", row.id);
+            skipped++; continue;
+          }
+          rendered = renderInvoiceSent(ctx, qInv); to = project.client_email; break;
+        }
+        case "new_message": {
+          if (!project) throw new Error("missing project");
+          rendered = renderNewMessage(ctx); to = project.client_email; break;
+        }
         case "nelson_alert": rendered = renderNelsonAlert(ctx); to = NELSON; break;
         default: throw new Error(`unknown kind ${row.kind}`);
       }
