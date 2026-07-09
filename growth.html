@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 fill=%27%2308080a%27/%3E%3Cpath d=%27M5 12V5h7M20 5h7v7M27 20v7h-7M12 27H5v-7%27 stroke=%27%23e9b949%27 stroke-width=%273%27 fill=%27none%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%274%27 fill=%27%23e9b949%27/%3E%3C/svg%3E">
+  <script>document.documentElement.classList.add("js");</script>
+  <title>Growth — Taylormade Studio</title>
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=Familjen+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/admin.css">
+  <style>
+    .grow-main { max-width: 1180px; margin: 0 auto; padding: 1.4rem clamp(1rem, 3vw, 2rem) 4rem; display: grid; gap: 1.2rem; }
+    .grow-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; align-items: start; }
+    @media (max-width: 900px) { .grow-grid2 { grid-template-columns: 1fr; } }
+    .srow { display: flex; align-items: center; justify-content: space-between; gap: .7rem; padding: .65rem 0; border-bottom: 1px solid var(--line-soft); flex-wrap: wrap; }
+    .srow:last-child { border-bottom: 0; }
+    .srow b { font-size: .93rem; }
+    .srow small { color: var(--muted); font-size: .78rem; display: block; }
+    .chip { font-family: var(--font-mono); font-size: .55rem; letter-spacing: .14em; text-transform: uppercase; padding: .35em .8em; border-radius: 99px; border: 1px solid var(--line-soft); color: var(--muted); }
+    .chip.sent { color: var(--gold); border-color: rgba(233,185,73,.5); background: var(--gold-soft); }
+    .chip.sending { color: #ffd79e; border-color: rgba(255,215,158,.4); }
+    .chip.active { color: var(--green); border-color: rgba(87,217,163,.35); background: rgba(87,217,163,.08); }
+    .chip.unsub, .chip.err { color: #ff9e8a; border-color: rgba(255,158,138,.4); }
+    .mini { font-size: .78rem; padding: .4em .9em; }
+    .fldi { background: var(--bg); border: 1px solid var(--line-soft); color: var(--text); padding: .45em .6em; border-radius: 8px; font: inherit; font-size: .85rem; width: 100%; }
+    .fldl { display: block; font-family: var(--font-mono); font-size: .5rem; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); margin-bottom: .25rem; }
+    .qtable { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .qtable th { font-family: var(--font-mono); font-size: .5rem; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--line-soft); }
+    .qtable td { padding: .45rem .5rem; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+    .linkish { background: none; border: 0; color: var(--muted); font-size: .85rem; }
+    .linkish:hover { color: var(--gold); }
+    /* money tiles + chart */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: .8rem; }
+    .stat { border: 1px solid var(--line-soft); background: var(--bg-3); border-radius: 10px; padding: .9rem 1rem; }
+    .stat .n { display: block; font-family: var(--font-display); font-weight: 700; font-size: clamp(1.05rem, 2vw, 1.4rem); line-height: 1.15; }
+    .stat small { display: block; color: var(--muted); font-size: .72rem; margin-top: .15rem; }
+    .stat .l { display: block; font-family: var(--font-mono); font-size: .5rem; letter-spacing: .16em; text-transform: uppercase; color: var(--faint); margin-top: .4rem; }
+    .money-grid2 { display: grid; grid-template-columns: 1.5fr 1fr; gap: 1.4rem; align-items: start; }
+    @media (max-width: 900px) { .money-grid2 { grid-template-columns: 1fr; } }
+    .bar-row { display: grid; grid-template-columns: 62px 1fr 92px; gap: .6rem; align-items: center; padding: .26rem 0; }
+    .bar-row .bm { font-family: var(--font-mono); font-size: .55rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+    .bar-track { background: var(--bg); border: 1px solid var(--line-soft); border-radius: 4px; height: 14px; overflow: hidden; }
+    .bar-fill { height: 100%; background: linear-gradient(90deg, var(--gold-deep), var(--gold)); }
+    .bar-amt { font-size: .78rem; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    /* make-more groups */
+    .ngrid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem 2rem; align-items: start; }
+    @media (max-width: 900px) { .ngrid { grid-template-columns: 1fr; } }
+    .ngroup h4 { display: flex; align-items: center; gap: .6rem; font-family: var(--font-mono); font-size: .6rem; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); font-weight: 400; margin: 1rem 0 .3rem; }
+    .ngroup h4 b { color: var(--gold); font-weight: 500; }
+    .plink { font-size: .78rem; white-space: nowrap; }
+    /* newsletter + campaigns */
+    .list-head { display: flex; align-items: flex-end; justify-content: space-between; gap: .8rem; flex-wrap: wrap; margin-bottom: .9rem; }
+    .big-n { display: block; font-family: var(--font-display); font-weight: 700; font-size: 1.7rem; line-height: 1.1; }
+    .sub-add { display: flex; gap: .6rem; margin-top: .9rem; flex-wrap: wrap; align-items: flex-end; }
+    .compose { margin-top: 1.2rem; border-top: 1px solid var(--line-soft); padding-top: 1.1rem; }
+    .compose .fields { display: grid; gap: .7rem; margin-top: .7rem; }
+    .compose textarea.fldi { resize: vertical; min-height: 170px; line-height: 1.55; }
+    .hint { display: block; color: var(--muted); font-size: .74rem; line-height: 1.5; margin-top: .4rem; }
+  </style>
+</head>
+<body>
+
+  <!-- login -->
+  <div class="login-wrap" id="loginView">
+    <span class="hud"><span class="tick">●</span> STUDIO ACCESS</span>
+    <h1>Taylormade<span style="color:var(--gold);">/</span>Growth</h1>
+    <form id="loginForm">
+      <div class="field"><label for="email">Email</label><input type="email" id="email" autocomplete="username" required></div>
+      <div class="field"><label for="password">Password</label><input type="password" id="password" autocomplete="current-password" required></div>
+      <button class="btn btn-gold" id="loginBtn" type="submit" style="width:100%;">Sign in</button>
+      <div class="login-err" id="loginErr"></div>
+    </form>
+  </div>
+
+  <!-- app -->
+  <div id="appView" hidden>
+    <div class="abar">
+      <a class="nav-logo" href="index.html" style="font-family:var(--font-display);font-weight:700;font-size:0.9rem;color:var(--text);">TAYLORMADE<span style="color:var(--gold);">/</span>GROWTH</a>
+      <div style="display:flex; gap:1rem; align-items:center;">
+        <a href="admin.html" style="color:var(--muted); font-size:.85rem;">Pipeline →</a>
+        <a href="schedule.html" style="color:var(--muted); font-size:.85rem;">Schedule →</a>
+        <button class="linkish" id="logoutBtn">Sign out</button>
+      </div>
+    </div>
+
+    <main class="grow-main">
+      <!-- money -->
+      <div class="acard">
+        <h3>MONEY <b>ON THE BOOKS</b> <span style="font-weight:400; font-size:.7rem; color:var(--muted);">(collected payments + what's still out)</span></h3>
+        <div id="money"><span class="hud">LOADING…</span></div>
+      </div>
+
+      <!-- make more -->
+      <div class="acard">
+        <h3>MAKE <b>MORE</b> <span style="font-weight:400; font-size:.7rem; color:var(--muted);">(what's sitting on the table right now)</span></h3>
+        <div id="nudges"><span class="hud">LOADING…</span></div>
+      </div>
+
+      <div class="grow-grid2">
+        <!-- newsletter list -->
+        <div class="acard">
+          <h3>NEWSLETTER <b>LIST</b></h3>
+          <div class="list-head">
+            <div><span class="big-n" id="subCount">…</span><span class="fldl" style="margin:.2rem 0 0;">Active subscribers</span></div>
+            <button class="btn btn-ghost mini" id="subExport">Export CSV</button>
+          </div>
+          <div id="subs" style="overflow-x:auto;"><span class="hud">LOADING…</span></div>
+          <div class="sub-add">
+            <div style="flex:1.4; min-width:170px;"><span class="fldl">Email</span><input class="fldi" type="email" id="subEmail" maxlength="200" placeholder="name@example.com"></div>
+            <div style="flex:1; min-width:130px;"><span class="fldl">Name (optional)</span><input class="fldi" id="subName" maxlength="120"></div>
+            <button class="btn btn-gold mini" id="subAdd">Add</button>
+          </div>
+        </div>
+
+        <!-- campaigns -->
+        <div class="acard">
+          <h3>EMAIL <b>CAMPAIGNS</b></h3>
+          <div id="campaigns"><span class="hud">LOADING…</span></div>
+
+          <div class="compose" id="compose">
+            <span class="hud"><span class="tick">●</span> <span id="composeLabel">NEW CAMPAIGN</span></span>
+            <div class="fields">
+              <div><span class="fldl">Subject (required)</span><input class="fldi" id="cSubject" maxlength="200"></div>
+              <div><span class="fldl">Preheader (optional — the preview text next to the subject in the inbox)</span><input class="fldi" id="cPreheader" maxlength="200"></div>
+              <div>
+                <span class="fldl">Body</span>
+                <textarea class="fldi" id="cBody"></textarea>
+                <small class="hint">Plain paragraphs separated by blank lines. "## " starts a heading. [Link text](https://…) makes a link. Every email automatically gets your branded header/footer + unsubscribe link.</small>
+              </div>
+              <div style="display:flex; gap:.8rem; align-items:center;">
+                <button class="btn btn-gold mini" id="cSave">Save draft</button>
+                <button class="linkish" id="cCancel" hidden>Cancel edit</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/growth.js"></script>
+</body>
+</html>

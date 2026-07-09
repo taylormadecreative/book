@@ -191,6 +191,7 @@ async function loadServices() {
         </select></div>
         <div><label>Duration (min)</label><input data-f="duration_min" type="number" min="15" max="720" value="${s.duration_min}"></div>
         <div><label>Price ($, blank = none)</label><input data-f="price" type="number" min="0" step="1" value="${s.price_cents != null ? s.price_cents / 100 : ""}"></div>
+        <div><label>Weekend price ($, blank = same as weekday)</label><input data-f="wkprice" type="number" min="0" step="1" value="${s.weekend_price_cents != null ? s.weekend_price_cents / 100 : ""}"></div>
         <div><label>Deposit ($, blank = full price due)</label><input data-f="deposit" type="number" min="0" step="1" value="${s.deposit_cents != null ? s.deposit_cents / 100 : ""}"></div>
         <div><label>Visible on site</label><select data-f="active"><option value="true" ${s.active ? "selected" : ""}>Yes</option><option value="false" ${s.active ? "" : "selected"}>No</option></select></div>
         <div style="grid-column: 1 / -1;"><label>Tagline (shown on booking cards)</label><input data-f="tagline" value="${esc(s.tagline || "")}" maxlength="240"></div>
@@ -201,12 +202,13 @@ async function loadServices() {
   box.querySelectorAll("[data-save-svc]").forEach((btn) => btn.addEventListener("click", async () => {
     const d = btn.closest("details");
     const get = (f) => d.querySelector(`[data-f="${f}"]`).value;
-    const priceRaw = get("price"), depRaw = get("deposit");
+    const priceRaw = get("price"), depRaw = get("deposit"), wkRaw = get("wkprice");
     const payload = {
       name: get("name").trim(),
       kind: get("kind"),
       duration_min: Math.min(720, Math.max(15, parseInt(get("duration_min") || "60", 10))),
       price_cents: priceRaw === "" ? null : Math.round(parseFloat(priceRaw) * 100),
+      weekend_price_cents: wkRaw === "" ? null : Math.round(parseFloat(wkRaw) * 100),
       deposit_cents: depRaw === "" ? null : Math.round(parseFloat(depRaw) * 100),
       active: get("active") === "true",
       tagline: get("tagline").trim() || null,

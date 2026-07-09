@@ -64,7 +64,10 @@ async function load() {
     // a rebuild would wipe half-typed fields or interrupt an upload
     const ae = document.activeElement;
     const typing = ae && $("#dpane").contains(ae) && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
-    if (p && !typing && !state.uploading) renderDetail(p, true);
+    // …nor while a contract draft is open in the editor — unsaved contract copy
+    // must survive the poll even if focus wanders outside the textarea
+    const editingContract = !!document.getElementById("ctEditor");
+    if (p && !typing && !state.uploading && !editingContract) renderDetail(p, true);
   }
 }
 
@@ -234,6 +237,11 @@ function renderDetail(p, keepScroll = false) {
           </div>
         </div>
 
+        <div class="acard">
+          <h3>CONTRACTS <b>· E-SIGN</b></h3>
+          <div id="ctBox"><span class="hud" style="color:var(--faint);">LOADING…</span></div>
+        </div>
+
         <div class="acard notes">
           <h3>INTERNAL <b>NOTES</b></h3>
           <textarea id="noteBox" placeholder="Only you see this…">${esc(p.notes_internal || "")}</textarea>
@@ -281,6 +289,8 @@ function renderDetail(p, keepScroll = false) {
   restoreForms(formCap);
   wireDetail(p);
   hydrateThumbs();
+  if (ctState.projectId === p.id) renderContracts(p); // instant paint from cache
+  loadContracts(p); // then refresh from the DB
 }
 
 /* ---------------- galleries (photos & video) ---------------- */
@@ -512,6 +522,185 @@ function wireDetail(p) {
     toast("Gallery deleted");
     await load();
   }));
+}
+
+/* ---------------- contracts (e-sign) ---------------- */
+const CT_PILL = { draft: "", sent: "gold", signed: "green", void: "red" };
+const ctState = { projectId: null, list: [], templates: null, editing: null, viewing: null, picking: false };
+
+async function loadContracts(p) {
+  if (ctState.projectId !== p.id) {
+    ctState.projectId = p.id;
+    ctState.list = [];
+    ctState.editing = null;
+    ctState.viewing = null;
+    ctState.picking = false;
+  }
+  const { data, error } = await sb.from("bk_contracts").select("*").eq("project_id", p.id).order("created_at");
+  if (state.sel !== p.id || !$("#ctBox")) return; // switched projects while fetching
+  if (error) { $("#ctBox").innerHTML = `<span class="hud">CONTRACTS FAILED TO LOAD</span>`; return; }
+  ctState.list = data || [];
+  renderContracts(p);
+}
+
+function ctViewBlock(c) {
+  return `
+    <div class="ct-viewbox">
+      <pre class="doc">${esc(c.body || "")}</pre>
+      ${c.status === "signed" ? `
+        <div class="ct-sigblock">
+          <span class="hud"><span class="tick">&#10003;</span> SIGNED</span>
+          <div style="font-size:0.9rem;font-weight:600;margin-top:0.35rem;">${esc(c.signer_name || "")} · ${fmtD(c.signed_at)}</div>
+          ${c.body_sha256 ? `<div class="hud" style="margin-top:0.35rem;color:var(--faint);">SHA-256 ${esc(c.body_sha256.slice(0, 16))}…</div>` : ""}
+        </div>` : ""}
+    </div>`;
+}
+
+function ctEditorBlock(c) {
+  return `
+    <div class="ct-editor" id="ctEditor">
+      <input id="ctTitle" value="${esc(c.title)}" maxlength="200" aria-label="Contract title" placeholder="Contract title">
+      <textarea id="ctBodyBox" aria-label="Contract body">${esc(c.body || "")}</textarea>
+      <div class="ct-eacts">
+        <button class="btn btn-ghost" id="ctSave">Save</button>
+        <button class="btn btn-gold" id="ctSend">Send to client</button>
+        <button class="btn btn-ghost danger" id="ctDelete">Delete</button>
+      </div>
+    </div>`;
+}
+
+function renderContracts(p) {
+  const box = $("#ctBox");
+  if (!box || ctState.projectId !== p.id) return;
+
+  const rows = ctState.list.length ? ctState.list.map((c) => `
+    <div class="ainv">
+      <div>
+        <div class="t">${esc(c.title)} <span class="pill ${CT_PILL[c.status] || ""}" style="margin-left:0.4em;">${c.status}</span></div>
+        <small style="color:var(--faint);">${
+          c.status === "signed" ? `Signed by ${esc(c.signer_name || "")} · ${fmtD(c.signed_at)}`
+          : c.status === "sent" ? `Sent ${fmtD(c.sent_at)} · waiting on the client`
+          : c.status === "void" ? "Voided"
+          : "Draft — the client can't see this yet"}</small>
+      </div>
+      <div class="acts">
+        ${c.status === "draft" && ctState.editing !== c.id ? `<button data-ct-edit="${c.id}">Edit</button>` : ""}
+        ${c.status !== "draft" ? `<button data-ct-view="${c.id}">${ctState.viewing === c.id ? "Hide" : "View"}</button>` : ""}
+        ${c.status === "sent" ? `<button data-ct-void="${c.id}">Void</button>` : ""}
+      </div>
+    </div>
+    ${ctState.viewing === c.id ? ctViewBlock(c) : ""}
+    ${ctState.editing === c.id ? ctEditorBlock(c) : ""}`).join("")
+    : `<p style="color:var(--faint);font-size:0.85rem;margin:0;">No contracts yet. Start one from a template and send it for a signature.</p>`;
+
+  const foot = ctState.picking
+    ? ((ctState.templates || []).length ? `
+      <div class="ct-new">
+        <select id="ctPickSel" aria-label="Contract template">
+          ${ctState.templates.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("")}
+        </select>
+        <button class="btn btn-gold" id="ctPickCreate">Create draft</button>
+        <button class="btn btn-ghost" id="ctPickCancel">Cancel</button>
+      </div>`
+      : `<div class="ct-new">
+        <p style="color:var(--faint);font-size:0.85rem;margin:0;">No templates found — add one to bk_contract_templates first.</p>
+        <button class="btn btn-ghost" id="ctPickCancel">Close</button>
+      </div>`)
+    : `<div class="ct-new"><button class="btn btn-ghost" id="ctNewBtn">+ New contract</button></div>`;
+
+  box.innerHTML = rows + foot;
+  wireContracts(p);
+}
+
+function wireContracts(p) {
+  const box = $("#ctBox");
+  if (!box) return;
+
+  const newBtn = $("#ctNewBtn");
+  if (newBtn) newBtn.addEventListener("click", async () => {
+    if (!ctState.templates) {
+      const { data, error } = await sb.from("bk_contract_templates").select("id, name, body").order("name");
+      if (error) { toast("Could not load templates"); return; }
+      ctState.templates = data || [];
+    }
+    ctState.picking = true;
+    renderContracts(p);
+  });
+
+  const pickCancel = $("#ctPickCancel");
+  if (pickCancel) pickCancel.addEventListener("click", () => { ctState.picking = false; renderContracts(p); });
+
+  const pickCreate = $("#ctPickCreate");
+  if (pickCreate) pickCreate.addEventListener("click", async () => {
+    const tpl = (ctState.templates || []).find((t) => t.id === $("#ctPickSel").value);
+    if (!tpl) { toast("Pick a template"); return; }
+    pickCreate.disabled = true;
+    const { data, error } = await sb.from("bk_contracts")
+      .insert({ project_id: p.id, title: tpl.name, body: tpl.body, status: "draft" })
+      .select()
+      .single();
+    if (error) { pickCreate.disabled = false; toast("Could not create the draft"); return; }
+    ctState.picking = false;
+    ctState.editing = data.id;
+    await loadContracts(p);
+  });
+
+  box.querySelectorAll("[data-ct-edit]").forEach((b) => b.addEventListener("click", () => {
+    ctState.editing = b.dataset.ctEdit;
+    renderContracts(p);
+  }));
+
+  box.querySelectorAll("[data-ct-view]").forEach((b) => b.addEventListener("click", () => {
+    ctState.viewing = ctState.viewing === b.dataset.ctView ? null : b.dataset.ctView;
+    renderContracts(p);
+  }));
+
+  box.querySelectorAll("[data-ct-void]").forEach((b) => b.addEventListener("click", async () => {
+    if (!confirm("Void this contract? The client will no longer be able to sign it.")) return;
+    const { error } = await sb.from("bk_contracts").update({ status: "void" }).eq("id", b.dataset.ctVoid);
+    if (error) { toast("Void failed"); return; }
+    toast("Contract voided.");
+    await loadContracts(p);
+  }));
+
+  const ctSave = $("#ctSave");
+  if (ctSave) ctSave.addEventListener("click", async () => {
+    const title = $("#ctTitle").value.trim() || "Contract";
+    const body = $("#ctBodyBox").value;
+    const { error } = await sb.from("bk_contracts").update({ title, body }).eq("id", ctState.editing);
+    if (error) { toast("Save failed"); return; }
+    ctState.editing = null;
+    toast("Draft saved.");
+    await loadContracts(p);
+  });
+
+  const ctSend = $("#ctSend");
+  if (ctSend) ctSend.addEventListener("click", async () => {
+    const title = $("#ctTitle").value.trim() || "Contract";
+    const body = $("#ctBodyBox").value;
+    if (!body.trim()) { toast("The contract body is empty."); return; }
+    if ((body.includes("[REVIEW") || body.includes("[DESCRIBE")) &&
+        !confirm("Heads up — this contract still has [DESCRIBE…] or [REVIEW…] placeholders in it.\n\nSend it to the client anyway?")) return;
+    ctSend.disabled = true;
+    const { error } = await sb.from("bk_contracts")
+      .update({ title, body, status: "sent", sent_at: new Date().toISOString() })
+      .eq("id", ctState.editing);
+    ctSend.disabled = false;
+    if (error) { toast("Send failed"); return; }
+    ctState.editing = null;
+    toast("Contract sent — client emailed automatically.");
+    await loadContracts(p);
+  });
+
+  const ctDelete = $("#ctDelete");
+  if (ctDelete) ctDelete.addEventListener("click", async () => {
+    if (!confirm("Delete this draft contract? This cannot be undone.")) return;
+    const { error } = await sb.from("bk_contracts").delete().eq("id", ctState.editing);
+    if (error) { toast("Delete failed"); return; }
+    ctState.editing = null;
+    toast("Draft deleted.");
+    await loadContracts(p);
+  });
 }
 
 /* ---------------- new project ---------------- */

@@ -21,6 +21,7 @@ const PIPELINE = ["new", "quoted", "booked", "in_production", "delivered"];
 const PIPE_LABEL = { new: "Inquiry", quoted: "Quoted", booked: "Booked", in_production: "Production", delivered: "Delivered" };
 
 let lastMsgCount = -1;
+let lastCtKey = null;
 
 init();
 async function init() {
@@ -109,6 +110,43 @@ function render(data) {
       }).join("")
     : `<p style="color:var(--faint);font-size:0.9rem;margin:0;">No invoices yet — your custom quote lands here.</p>`;
 
+  // contracts — e-sign. Rebuild only when the set or statuses change so the
+  // 10s poll never wipes a half-typed signature.
+  const contracts = data.contracts || [];
+  const cCard = $("#contractsCard");
+  if (cCard) {
+    cCard.hidden = !contracts.length;
+    const ctKey = contracts.map((c) => `${c.id}:${c.status}`).join("|");
+    if (contracts.length && ctKey !== lastCtKey) {
+      lastCtKey = ctKey;
+      const fmtSigned = (iso) => iso ? new Date(iso).toLocaleDateString("en-US", { timeZone: "America/Chicago", month: "long", day: "numeric", year: "numeric" }) : "";
+      $("#pContracts").innerHTML = contracts.map((c) => `
+        <div class="ct">
+          <div class="ct-head">
+            <strong>${esc(c.title)}</strong>
+            ${c.status === "signed" ? `<span class="pill green">Signed</span>` : `<span class="pill gold">Awaiting signature</span>`}
+          </div>
+          <div class="ct-doc" tabindex="0" aria-label="${esc(c.title)} — full contract text">${esc(c.body)}</div>
+          ${c.status === "signed"
+            ? `<div class="ct-signed">&#10003; Signed by ${esc(c.signer_name || "")} on ${fmtSigned(c.signed_at)}</div>`
+            : `
+          <form class="ct-sign" data-sign-form="${esc(c.id)}">
+            <span class="hud">SIGN <span class="tick">/</span> E-SIGNATURE</span>
+            <div class="field">
+              <label for="sig-name-${esc(c.id)}">Type your full legal name</label>
+              <input id="sig-name-${esc(c.id)}" data-sig-name autocomplete="name" maxlength="120" required>
+            </div>
+            <label class="ct-agree" for="sig-agree-${esc(c.id)}">
+              <input type="checkbox" id="sig-agree-${esc(c.id)}" data-sig-agree required>
+              <span>I agree that typing my name here is my electronic signature</span>
+            </label>
+            <button class="btn btn-gold" type="submit" disabled>Sign contract</button>
+            <p class="ct-err" hidden></p>
+          </form>`}
+        </div>`).join("");
+    }
+  }
+
   // files
   $("#pFiles").innerHTML = data.files.length
     ? data.files.map((f) => `
@@ -178,3 +216,46 @@ $("#chatInput").addEventListener("keydown", (e) => {
     $("#chatForm").requestSubmit();
   }
 });
+
+/* sign contracts — listeners live on the static container so they survive re-renders */
+const pContracts = $("#pContracts");
+if (pContracts) {
+  // Sign stays disabled until both the typed name and the agreement box are in
+  const syncSignBtn = (form) => {
+    const name = form.querySelector("[data-sig-name]").value.trim();
+    const agree = form.querySelector("[data-sig-agree]").checked;
+    form.querySelector("button[type=submit]").disabled = !(name && agree);
+  };
+  const onFieldChange = (e) => {
+    const form = e.target.closest("form[data-sign-form]");
+    if (form) syncSignBtn(form);
+  };
+  pContracts.addEventListener("input", onFieldChange);
+  pContracts.addEventListener("change", onFieldChange);
+
+  pContracts.addEventListener("submit", async (e) => {
+    const form = e.target.closest("form[data-sign-form]");
+    if (!form) return;
+    e.preventDefault();
+    const btn = form.querySelector("button[type=submit]");
+    const err = form.querySelector(".ct-err");
+    const name = form.querySelector("[data-sig-name]").value.trim();
+    if (!name || !form.querySelector("[data-sig-agree]").checked || btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = "Signing…";
+    err.hidden = true;
+    try {
+      const out = await BK.rpc("bk_portal_sign_contract", {
+        p_project: PID, p_token: TOKEN, p_contract: form.dataset.signForm, p_signer_name: name,
+      });
+      if (!out || out.ok !== true) throw new Error((out && out.error) || "sign_failed");
+      btn.textContent = "Signed ✓";
+      await refresh(); // pulls the signed state and re-renders this card
+    } catch (_) {
+      btn.disabled = false;
+      btn.textContent = "Sign contract";
+      err.textContent = "Your signature didn't go through — give it another try, or send Nelson a message and he'll sort it out.";
+      err.hidden = false;
+    }
+  });
+}
