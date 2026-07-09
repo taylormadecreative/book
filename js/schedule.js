@@ -41,7 +41,7 @@ $("#logoutBtn").addEventListener("click", async () => { await sb.auth.signOut();
 async function boot() {
   $("#loginView").hidden = true;
   $("#appView").hidden = false;
-  await Promise.all([loadBookings(), loadAvail(), loadBlackouts(), loadCfg(), loadServices(), loadEmails()]);
+  await Promise.all([loadBookings(), loadAvail(), loadBlackouts(), loadCfg(), loadServices(), loadAddons(), loadEmails()]);
 }
 
 /* ---------------- bookings ---------------- */
@@ -246,3 +246,57 @@ async function loadEmails() {
     </tr>`).join("")}
   </table>`;
 }
+
+
+/* ---------------- studio add-ons (rentable gear) ---------------- */
+async function loadAddons() {
+  const { data, error } = await sb.from("bk_addons").select("*").order("sort");
+  const box = $("#addons");
+  if (error) { box.innerHTML = `<span class="hud">LOAD FAILED</span>`; return; }
+  box.innerHTML = data.length ? data.map((a) => `
+    <div class="srow" data-id="${a.id}">
+      <div style="display:flex; gap:.6rem; align-items:center; flex-wrap:wrap;">
+        <input class="fldi" data-f="name" value="${esc(a.name)}" maxlength="80" style="width:180px;">
+        <input class="fldi" data-f="price" type="number" min="0" step="1" value="${a.price_cents != null ? a.price_cents / 100 : ""}" placeholder="on request" style="width:110px;">
+        <label style="display:flex; gap:.4rem; align-items:center; font-size:.8rem; color:var(--muted);">
+          <input type="checkbox" data-f="active" ${a.active ? "checked" : ""}> visible
+        </label>
+      </div>
+      <div style="display:flex; gap:.5rem;">
+        <button class="btn btn-gold mini" data-save-addon>Save</button>
+        <button class="btn btn-ghost mini" data-del-addon>Remove</button>
+      </div>
+    </div>`).join("") : `<span class="hud" style="color:var(--faint);">NO GEAR YET</span>`;
+  box.querySelectorAll("[data-save-addon]").forEach((btn) => btn.addEventListener("click", async () => {
+    const row = btn.closest(".srow");
+    const priceRaw = row.querySelector('[data-f="price"]').value;
+    const payload = {
+      name: row.querySelector('[data-f="name"]').value.trim(),
+      price_cents: priceRaw === "" ? null : Math.round(parseFloat(priceRaw) * 100),
+      active: row.querySelector('[data-f="active"]').checked,
+    };
+    if (payload.name.length < 2) { toast("Give the gear a name."); return; }
+    const { error } = await sb.from("bk_addons").update(payload).eq("id", row.dataset.id);
+    if (error) { toast("Save failed: " + error.message); return; }
+    toast("Gear saved — live on the booking page.");
+    loadAddons();
+  }));
+  box.querySelectorAll("[data-del-addon]").forEach((btn) => btn.addEventListener("click", async () => {
+    if (!confirm("Remove this gear from the rental list?")) return;
+    const { error } = await sb.from("bk_addons").delete().eq("id", btn.closest(".srow").dataset.id);
+    if (error) { toast("Remove failed: " + error.message); return; }
+    toast("Removed."); loadAddons();
+  }));
+}
+$("#adAdd").addEventListener("click", async () => {
+  const name = $("#adName").value.trim();
+  const priceRaw = $("#adPrice").value;
+  if (name.length < 2) { toast("Give the gear a name."); return; }
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || ("gear-" + Math.random().toString(36).slice(2, 8));
+  const { error } = await sb.from("bk_addons").insert({
+    slug, name, price_cents: priceRaw === "" ? null : Math.round(parseFloat(priceRaw) * 100),
+  });
+  if (error) { toast("Add failed: " + error.message); return; }
+  $("#adName").value = $("#adPrice").value = "";
+  toast("Gear added."); loadAddons();
+});

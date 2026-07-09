@@ -80,9 +80,11 @@ Deno.serve(async (req: Request) => {
 
     // the buyer's own name doesn't belong in the product string — prefer the
     // invoice's first line item ("Digitals Session · Jul 10, 2026 2:00 PM")
+    const nLines = Array.isArray(inv.line_items) ? inv.line_items.length : 0;
     const lineTitle =
-      (Array.isArray(inv.line_items) && inv.line_items[0]?.title) ||
-      `${inv.title} — ${inv.bk_projects.title ?? "Taylormade Creative"}`;
+      ((nLines > 0 && inv.line_items[0]?.title) ||
+        `${inv.title} — ${inv.bk_projects.title ?? "Taylormade Creative"}`) +
+      (nLines > 1 ? ` (+${nLines - 1} add-on${nLines > 2 ? "s" : ""})` : "");
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",

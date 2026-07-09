@@ -107,6 +107,17 @@
         <div id="services"></div>
       </div>
 
+      <!-- rentable gear (studio add-ons) -->
+      <div class="acard">
+        <h3>STUDIO <b>ADD-ONS</b> <span style="font-weight:400; font-size:.7rem; color:var(--muted);">(gear renters can add at booking — blank price = "priced on request")</span></h3>
+        <div id="addons"></div>
+        <div style="display:flex; gap:.6rem; margin-top:.8rem; flex-wrap:wrap; align-items:flex-end;">
+          <div style="flex:1.4; min-width:140px;"><span class="fldl">Name</span><input class="fldi" id="adName" maxlength="80" placeholder="e.g. Nova P300"></div>
+          <div style="flex:1; min-width:100px;"><span class="fldl">Price ($)</span><input class="fldi" id="adPrice" type="number" min="0" step="1" placeholder="blank = on request"></div>
+          <button class="btn btn-gold mini" id="adAdd">Add gear</button>
+        </div>
+      </div>
+
       <!-- email log -->
       <div class="acard">
         <h3>AUTOMATED <b>EMAILS</b> <span style="font-weight:400; font-size:.7rem; color:var(--muted);">(queue drains every 10 minutes)</span></h3>
