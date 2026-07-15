@@ -41,7 +41,7 @@ $("#logoutBtn").addEventListener("click", async () => { await sb.auth.signOut();
 async function boot() {
   $("#loginView").hidden = true;
   $("#appView").hidden = false;
-  await Promise.all([loadBookings(), loadAvail(), loadBlackouts(), loadCfg(), loadServices(), loadAddons(), loadEmails()]);
+  await Promise.all([loadBookings(), loadAvail(), loadSvcHours(), loadBlackouts(), loadCfg(), loadServices(), loadAddons(), loadEmails()]);
 }
 
 /* ---------------- bookings ---------------- */
@@ -118,6 +118,50 @@ async function loadAvail() {
     if (error) { toast("Save failed: " + error.message); return; }
     toast(`${DOW[dow]} saved.`);
     loadAvail();
+  }));
+}
+
+/* ---------------- digitals hours (per-service override of weekly availability) ---------------- */
+let digitalsSvcId = null;
+async function loadSvcHours() {
+  const box = $("#svcHours");
+  if (!box) return;
+  if (!digitalsSvcId) {
+    const { data, error } = await sb.from("bk_services").select("id").eq("slug", "digitals").single();
+    if (error || !data) { box.innerHTML = `<span class="hud">LOAD FAILED</span>`; return; }
+    digitalsSvcId = data.id;
+  }
+  const { data, error } = await sb.from("bk_service_hours").select("*").eq("service_id", digitalsSvcId).order("dow");
+  if (error) { box.innerHTML = `<span class="hud">LOAD FAILED</span>`; return; }
+  const byDow = {};
+  (data || []).forEach((r) => { (byDow[r.dow] ||= []).push(r); });
+  box.innerHTML = DOW.map((name, dow) => {
+    const r = (byDow[dow] || [])[0];
+    const on = r ? r.active : false;
+    return `
+    <div class="avrow" data-dow="${dow}" data-id="${r ? r.id : ""}">
+      <span class="day">${name}</span>
+      <input type="checkbox" ${on ? "checked" : ""} aria-label="${name} digitals open">
+      <input type="time" value="${r ? minToTime(r.start_min) : "09:00"}" step="1800" aria-label="${name} digitals start">
+      <input type="time" value="${r ? minToTime(r.end_min) : "21:00"}" step="1800" aria-label="${name} digitals end">
+      <button class="btn btn-ghost mini" data-save>Save</button>
+    </div>`;
+  }).join("");
+  box.querySelectorAll("[data-save]").forEach((btn) => btn.addEventListener("click", async () => {
+    const row = btn.closest(".avrow");
+    const dow = +row.dataset.dow;
+    const id = row.dataset.id;
+    const [chk, start, end] = [row.querySelector("input[type=checkbox]"), ...row.querySelectorAll("input[type=time]")];
+    const start_min = timeToMin(start.value), end_min = timeToMin(end.value);
+    if (end_min <= start_min) { toast("End must be after start."); return; }
+    const payload = { service_id: digitalsSvcId, dow, start_min, end_min, active: chk.checked };
+    const q = id
+      ? sb.from("bk_service_hours").update(payload).eq("id", id)
+      : sb.from("bk_service_hours").insert(payload);
+    const { error } = await q;
+    if (error) { toast("Save failed: " + error.message); return; }
+    toast(`Digitals ${DOW[dow]} saved.`);
+    loadSvcHours();
   }));
 }
 
