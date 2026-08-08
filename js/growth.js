@@ -43,6 +43,16 @@ $("#loginForm").addEventListener("submit", async (e) => {
   if (error) { err.textContent = error.message || "Could not sign in."; return; }
   await boot();
 });
+$("#googleBtn").addEventListener("click", async () => {
+  const err = $("#loginErr");
+  err.textContent = "";
+  // returns to this exact page; supabase-js picks the session up on the way back
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: location.origin + location.pathname },
+  });
+  if (error) err.textContent = error.message || "Could not start Google sign-in.";
+});
 $("#logoutBtn").addEventListener("click", async () => { await sb.auth.signOut(); location.reload(); });
 
 async function boot() {
