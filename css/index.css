@@ -572,6 +572,7 @@ fieldset.bstep { border: 0; padding: 0; margin: 0; min-width: 0; }
   .svc-preview.on { opacity: 1; transform: scale(1) rotate(2.5deg); }
 }
 .svc { cursor: default; }
+a.svc { cursor: pointer; color: inherit; text-decoration: none; }
 .svc h3 { font-size: clamp(1.5rem, 3.2vw, 2.5rem); }
 
 /* digitals band — gold drench */
