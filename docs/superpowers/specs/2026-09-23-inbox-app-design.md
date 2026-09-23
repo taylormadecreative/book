@@ -81,7 +81,7 @@ logic:
   project id, optional rewrite note, optional current draft. Gathers facts:
   project fields, service row from `bk_services` (name, price, deposit, kind),
   next 6 open slots from `bk_open_slots` for session services, past projects
-  for the email, last 10 messages. Calls the Claude API (`claude-sonnet-5`)
+  for the email, last 10 messages. Calls the Claude API (`claude-opus-5`, low effort, server-side refusal fallback on)
   with a system prompt carrying Nelson's rules:
   - sign as Nelson, warm partnership voice, never salesy, short (≤120 words)
   - quote ONLY prices present in the facts; project/custom work → offer a
@@ -90,14 +90,14 @@ logic:
     Dallas"), or availability not in the facts
   Returns `{ draft }`. On missing `ANTHROPIC_API_KEY` or any API error returns
   `{ draft: null, reason }`.
-- **`bk-send-reply`** — staff JWT required. Inserts the reply into
+- **Send = SQL RPC `bk_inbox_send`** (was an edge function; a security-definer RPC does the same in one transaction) — staff-gated. Inserts the reply into
   `bk_messages` (sender='studio', emailed_direct=true) so it lives in the
   project thread and portal, queues a `studio_reply` email with the full body
-  + portal link, pings `bk-mailer` for instant delivery, sets
+  + portal link, pings `bk-mailer` via pg_net for instant delivery, sets
   `inbox_handled_at`. Idempotency key from the client prevents a double-tap
   double-send.
 - **`bk-mailer`** gains a `studio_reply` renderer (branded template, full
-  reply text, "View in your portal" link, reply-to hello@).
+  reply text, "View in your portal" link; reply-to stays Nelson's Gmail like every other bk email, so client answers land where he reads).
 
 ### Front end (`taylormade-book` repo)
 
@@ -124,7 +124,7 @@ logic:
 
 - Offline: unit tests for `bk-push` payload building, draft-prompt fact
   assembly (asserts no price appears when the service has none), and
-  `bk-send-reply` idempotency against a fake DB.
+  `bk_inbox_send` idempotency in a rolled-back SQL test inside the apply script.
 - On production with real clicks (Nelson's iPhone + my browser rig): install,
   enable alerts, submit a test inquiry on the live site → phone buzzes → open
   → draft cites real price/slots → edit → Send → client inbox receives the
@@ -137,7 +137,7 @@ logic:
 
 1. `! bash ~/Downloads/apply-inbox.sh` — applies the migration via the
    Management API, generates VAPID keys + push secret, sets secrets, deploys
-   `bk-push`, `bk-draft-reply`, `bk-send-reply`, `bk-mailer`.
+   `bk-push`, `bk-draft-reply`, `bk-mailer`.
 2. Set `ANTHROPIC_API_KEY` in Supabase secrets (shared with the OPIL task).
 3. Push `inbox-app:main` (GitHub Pages deploys the page).
 4. Install on his iPhone and run one live test inquiry together.
