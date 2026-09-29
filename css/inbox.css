@@ -12,10 +12,12 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-body);
 
 .ib-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 10px 0 14px; background: linear-gradient(var(--bg) 70%, transparent); }
 .ib-brand { font-family: var(--font-display); font-weight: 800; letter-spacing: 0.08em; }
-.ib-alerts { background: var(--gold-soft); color: var(--gold); border: 1px solid rgba(233,185,73,.35); border-radius: 999px; padding: 8px 14px; font: 600 0.85rem var(--font-body); }
+.ib-alerts { min-height: 40px; background: var(--gold-soft); color: var(--gold); border: 1px solid rgba(233,185,73,.35); border-radius: 999px; padding: 8px 14px; font: 600 0.85rem var(--font-body); }
 .ib-note { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; color: var(--muted); font-size: 0.92rem; }
 .ib-chips { display: flex; gap: 8px; margin: 4px 0 12px; }
-.chip { background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 7px 14px; font: 500 0.85rem var(--font-body); }
+.chip { background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 999px; min-height: 40px; padding: 0 16px; font: 500 0.88rem var(--font-body); transition: border-color .2s var(--ease), color .2s var(--ease), transform .12s var(--ease); }
+.chip:active { transform: scale(0.97); }
+@media (hover: hover) { .chip:hover { border-color: var(--gold); color: var(--text); } .row:hover { background: var(--bg-2); } }
 .chip.on { border-color: var(--gold); color: var(--text); background: var(--gold-soft); }
 
 .ib-list { display: grid; }
@@ -40,7 +42,8 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-body);
 .ib-name { font-family: var(--font-display); font-size: 1.35rem; margin: 4px 0 2px; overflow-wrap: anywhere; }
 .ib-what { color: var(--gold); margin: 0 0 4px; font-weight: 600; }
 .ib-contact { color: var(--muted); font-size: 0.9rem; margin-bottom: 14px; overflow-wrap: anywhere; }
-.fact { border-left: 2px solid var(--line); padding: 2px 0 2px 12px; margin: 10px 0; }
+.fact { border-top: 1px solid var(--line-soft); padding: 12px 0 2px; margin: 0; }
+.fact:first-of-type { margin-top: 6px; }
 .fact span, .msg span { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
 .fact p, .msg p { margin: 3px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
 .ib-thread { display: grid; gap: 8px; margin: 16px 0; }
@@ -57,5 +60,5 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-body);
 .ib-actions .btn { text-align: center; min-height: 48px; }
 .ib-sent-it { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; padding: 12px; border: 1px dashed var(--gold); border-radius: 12px; }
 
-.ib-toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px); opacity: 0; background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-weight: 600; transition: opacity .25s var(--ease), transform .25s var(--ease); pointer-events: none; max-width: calc(100vw - 32px); }
+.ib-toast { position: fixed; z-index: 5; left: 50%; top: calc(14px + env(safe-area-inset-top)); transform: translate(-50%, -12px); opacity: 0; background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-weight: 600; transition: opacity .25s var(--ease), transform .25s var(--ease); pointer-events: none; max-width: calc(100vw - 32px); }
 .ib-toast.show { opacity: 1; transform: translate(-50%, 0); }

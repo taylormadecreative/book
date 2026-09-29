@@ -118,6 +118,7 @@ async function openItem(id) {
   const saved = loadDraft(id);
   setDraft(saved != null ? saved : buildDraft(state.item, state.slots, "suggested"));
   $("#draft").dataset.dirty = saved != null ? "1" : "0";
+  $("#draft").scrollTop = 0;
 }
 // real open times for a booked session service (anon RPC the public booking widget already uses)
 async function openSlots(it) {
@@ -138,7 +139,7 @@ $("#tpls").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-kind]"); if (!b) return;
   const box = $("#draft");
   if (box.value.trim() && box.dataset.dirty === "1" && !confirmReplace()) return;
-  setDraft(buildDraft(state.item, state.slots, b.dataset.kind)); box.dataset.dirty = "0"; box.focus();
+  setDraft(buildDraft(state.item, state.slots, b.dataset.kind)); box.dataset.dirty = "0"; box.scrollTop = 0;
 });
 // replacing edited text needs a second tap on the same chip within 3s (no browser dialogs)
 let armed = 0;
@@ -168,7 +169,7 @@ $("#sendBtn").addEventListener("click", async () => {
     toast(`Sent to ${state.item.project.client_email}`);
     history.pushState({}, "", "/inbox/"); await openList();
   } catch (e) {
-    $("#draftErr").textContent = e.message || "Couldn't send. Your reply is still here — try again.";
+    $("#draftErr").textContent = e.message || "Couldn't send. Your reply is still here, so try again.";
   } finally { state.sending = false; btn.disabled = false; btn.textContent = "Send email"; }
 });
 $("#smsBtn").addEventListener("click", () => { state.pendingText = true; });

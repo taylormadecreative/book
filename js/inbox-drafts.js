@@ -69,7 +69,7 @@ export function buildDraft(item, slots, kind) {
     const b = booked(item);
     if (b) {
       return wrap(first,
-        `You're all set for ${b.service ? b.service.name : what(item)} on ${longWhen(b.starts_at)}. Thank you for booking — I'm looking forward to it!\n\n` +
+        `You're all set for ${b.service ? b.service.name : what(item)} on ${longWhen(b.starts_at)}. Thank you for booking, I'm looking forward to it!\n\n` +
         `If anything comes up before then, just reply here.`);
     }
   }
