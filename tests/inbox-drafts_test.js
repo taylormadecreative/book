@@ -81,3 +81,8 @@ Deno.test("an 'other' service reads as 'your project'", () => {
   const d = buildDraft({ ...inquiry, project: { ...project, service: "other", title: null, event_date: null } }, [], "call");
   assertStringIncludes(d, "reaching out about your project.");
 });
+
+Deno.test("a title ending in 'Other' still reads as 'your project'", () => {
+  const d = buildDraft({ ...inquiry, project: { ...project, service: "other", title: "Dee — Other", event_date: null } }, [], "call");
+  assertStringIncludes(d, "reaching out about your project.");
+});

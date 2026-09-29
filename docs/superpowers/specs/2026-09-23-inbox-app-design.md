@@ -1,6 +1,6 @@
 # Inbox app — design
 
-Date: 2026-09-23 · Branch: `inbox-app` · Status: awaiting Nelson's review
+Date: 2026-09-23 · Branch: `inbox-app` · Status: BUILT 2026-09-29 on inbox-app (both repos). Nelson dropped Claude drafting on 2026-09-29: replies are pre-filled from templates using real booking data (js/inbox-drafts.js); no Anthropic key, no bk-draft-reply.
 
 ## Goal
 

@@ -22,7 +22,7 @@ function what(item) {
 }
 // "your brand content project", or just "your project"
 function yourProject(item) {
-  const w = what(item).toLowerCase();
+  const w = what(item).toLowerCase().replace(/^other$/, "project");
   return w === "project" ? "your project" : `your ${w} project`;
 }
 function booked(item) { return item.bookings.find((b) => b.status === "confirmed" || b.status === "completed") || null; }
