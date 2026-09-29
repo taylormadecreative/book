@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#08080a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Inbox">
+  <title>Taylormade Inbox</title>
+  <link rel="manifest" href="/inbox/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/assets/img/inbox-apple-180.png">
+  <link rel="icon" href="/assets/img/inbox-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=Familjen+Grotesk:wght@400;500;600;700&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/inbox.css">
+</head>
+<body>
+  <!-- sign in -->
+  <main class="ib-login" id="loginView" hidden>
+    <span class="hud"><span class="tick">●</span> STUDIO INBOX</span>
+    <h1>Taylormade<span class="gold">/</span>Inbox</h1>
+    <form id="loginForm">
+      <label for="email">Email</label><input type="email" id="email" autocomplete="username" required>
+      <label for="password">Password</label><input type="password" id="password" autocomplete="current-password" required>
+      <button class="btn btn-gold" id="loginBtn" type="submit">Sign in</button>
+    </form>
+    <button class="btn btn-ghost" id="googleBtn" type="button">Continue with Google</button>
+    <p class="ib-err" id="loginErr" role="alert"></p>
+  </main>
+
+  <!-- list -->
+  <main class="ib-app" id="listView" hidden>
+    <header class="ib-bar">
+      <span class="ib-brand">INBOX</span>
+      <button class="ib-alerts" id="alertsBtn" type="button">Turn on alerts</button>
+    </header>
+    <p class="ib-note" id="alertsNote" hidden></p>
+    <nav class="ib-chips" aria-label="Filter">
+      <button type="button" class="chip on" data-filter="needs">Needs reply</button>
+      <button type="button" class="chip" data-filter="all">All</button>
+    </nav>
+    <div id="list" class="ib-list" aria-live="polite"></div>
+    <button type="button" class="btn btn-ghost ib-more" id="moreBtn" hidden>Load more</button>
+    <footer class="ib-foot"><button type="button" class="linkish" id="logoutBtn">Sign out</button></footer>
+  </main>
+
+  <!-- detail -->
+  <main class="ib-app" id="detailView" hidden>
+    <header class="ib-bar">
+      <button type="button" class="ib-back" id="backBtn" aria-label="Back to inbox">‹ Inbox</button>
+      <button type="button" class="linkish" id="markBtn">Mark handled</button>
+    </header>
+    <section id="facts" class="ib-facts"></section>
+    <section class="ib-compose">
+      <div class="ib-compose-head">
+        <span class="hud">YOUR REPLY</span>
+        <span class="ib-count" id="count">0 / 4000</span>
+      </div>
+      <div class="ib-tpl" id="tpls" role="group" aria-label="Start from a template"></div>
+      <textarea id="draft" rows="9" maxlength="4000" aria-label="Your reply"></textarea>
+      <p class="ib-err" id="draftErr" role="alert"></p>
+      <div class="ib-actions">
+        <button type="button" class="btn btn-gold" id="sendBtn">Send email</button>
+        <a class="btn btn-ghost" id="smsBtn" hidden>Text it</a>
+        <a class="btn btn-ghost" id="callBtn" hidden>Call</a>
+      </div>
+      <div class="ib-sent-it" id="sentIt" hidden>
+        <span>Sent it by text?</span>
+        <button type="button" class="btn btn-gold" id="sentItYes">Mark handled</button>
+        <button type="button" class="linkish" id="sentItNo">Not yet</button>
+      </div>
+    </section>
+  </main>
+
+  <div class="ib-toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="/js/config.js"></script>
+  <script type="module" src="/js/inbox.js"></script>
+</body>
+</html>

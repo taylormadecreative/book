@@ -23,6 +23,11 @@ export function fmtWhen(iso) {
   const t = new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" }).format(d);
   return `${day} · ${t}`;
 }
+export function fmtDay(date) {
+  if (!date) return "";
+  return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" })
+    .format(new Date(date + "T12:00:00Z"));
+}
 function dial(phone) {
   const d = String(phone ?? "").replace(/[^\d+]/g, "");
   return d.replace(/\D/g, "").length >= 7 ? d : null;

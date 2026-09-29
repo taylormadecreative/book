@@ -45,3 +45,9 @@ Deno.test("list row escapes client text and shows the unread dot", () => {
   assertStringIncludes(html, "2h");
   assertEquals(esc(`"'&`), "&quot;&#39;&amp;");
 });
+
+Deno.test("fmtDay formats a plain date without timezone drift", async () => {
+  const { fmtDay } = await import("../js/inbox-view.js");
+  assertEquals(fmtDay("2026-10-12"), "Mon, Oct 12");
+  assertEquals(fmtDay(null), "");
+});
