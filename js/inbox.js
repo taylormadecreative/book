@@ -4,7 +4,8 @@ import { buildDraft, draftOptions } from "./inbox-drafts.js";
 
 const sb = window.supabase.createClient(window.BK.SUPABASE_URL, window.BK.SUPABASE_KEY);
 const $ = (s) => document.querySelector(s);
-const state = { filter: "needs", rows: [], item: null, slots: [], key: newKey(), sending: false, pendingText: false, poll: null };
+const state = { filter: "needs", rows: [], item: null, slots: [], key: newKey(), sending: false, sendTimer: null, pendingText: false, poll: null };
+const SEND_DELAY_MS = 5000;
 
 function toast(msg) {
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
@@ -14,12 +15,22 @@ function show(id) { ["#loginView", "#listView", "#detailView"].forEach((v) => { 
 const draftKey = (id) => `inbox-draft:${id}`;
 function saveDraft() { try { if (state.item) sessionStorage.setItem(draftKey(state.item.project.id), $("#draft").value); } catch (_) { /* private mode */ } }
 function loadDraft(id) { try { return sessionStorage.getItem(draftKey(id)); } catch (_) { return null; } }
-function clearDraft(id) { try { sessionStorage.removeItem(draftKey(id)); } catch (_) { /* ignore */ } }
+function clearDraft(id) { try { sessionStorage.removeItem(draftKey(id)); sessionStorage.removeItem(`inbox-key:${id}`); } catch (_) { /* ignore */ } }
+// the send key lives as long as the draft, so a send whose answer got lost can't go out twice
+function sendKeyFor(id) {
+  try {
+    let k = sessionStorage.getItem(`inbox-key:${id}`);
+    if (!k) { k = newKey(); sessionStorage.setItem(`inbox-key:${id}`, k); }
+    return k;
+  } catch (_) { return newKey(); }
+}
 
-async function rpc(fn, args) {
+async function rpc(fn, args, retried = false) {
   const { data, error } = await sb.rpc(fn, args);
   if (error) {
-    if (/forbidden|JWT|not authenticated/i.test(error.message)) { await sb.auth.signOut(); show("#loginView"); }
+    // an expired token after the phone wakes is normal: refresh and try once more, never sign him out for it
+    if (!retried && /JWT|expired/i.test(error.message)) { await sb.auth.refreshSession().catch(() => {}); return rpc(fn, args, true); }
+    if (/forbidden/i.test(error.message)) { await sb.auth.signOut(); show("#loginView"); }
     throw error;
   }
   return data;
@@ -50,7 +61,7 @@ async function route() {
 window.addEventListener("popstate", route);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) return;
-  if (state.pendingText) { $("#sentIt").hidden = false; state.pendingText = false; }
+  if (state.pendingText) { $("#sentIt").hidden = false; state.pendingText = false; $("#sentIt").scrollIntoView({ block: "center" }); }
   if (!$("#listView").hidden) loadList();
 });
 
@@ -63,6 +74,7 @@ async function openList() {
   clearInterval(state.poll); state.poll = setInterval(() => { if (!document.hidden && !$("#listView").hidden) loadList(); }, 20000);
 }
 async function loadList(more = false) {
+  if (!more && !state.rows.length) $("#list").innerHTML = `<p class="ib-empty">Loading…</p>`;
   try {
     const before = more && state.rows.length ? state.rows[state.rows.length - 1].last_at : null;
     const rows = await rpc("bk_inbox_list", { p_filter: state.filter, p_before: before });
@@ -72,7 +84,11 @@ async function loadList(more = false) {
       ? state.rows.map((r) => listRowHtml(r, now)).join("")
       : `<p class="ib-empty">${state.filter === "needs" ? "You're all caught up." : "Nothing here yet."}</p>`;
     $("#moreBtn").hidden = rows.length < 30;
-  } catch (e) { if (!$("#listView").hidden) $("#list").innerHTML = `<p class="ib-empty">Couldn't load the inbox. Pull to refresh.</p>`; }
+  } catch (e) {
+    if (!$("#listView").hidden && !state.rows.length) {
+      $("#list").innerHTML = `<div class="ib-empty"><p>Couldn't load the inbox.</p><button type="button" class="btn btn-ghost retry">Try again</button></div>`;
+    }
+  }
 }
 document.querySelectorAll(".chip").forEach((c) => c.addEventListener("click", () => {
   document.querySelectorAll(".chip").forEach((x) => x.classList.toggle("on", x === c));
@@ -80,6 +96,7 @@ document.querySelectorAll(".chip").forEach((c) => c.addEventListener("click", ()
 }));
 $("#moreBtn").addEventListener("click", () => loadList(true));
 $("#list").addEventListener("click", (e) => {
+  if (e.target.closest("button.retry")) { loadList(); return; }
   const a = e.target.closest("a.row"); if (!a) return;
   e.preventDefault(); history.pushState({}, "", `?p=${a.dataset.id}`); openItem(a.dataset.id);
 });
@@ -108,8 +125,12 @@ async function openItem(id) {
   show("#detailView"); clearInterval(state.poll);
   $("#facts").innerHTML = `<p class="ib-empty">Loading…</p>`; $("#sentIt").hidden = true; $("#draftErr").textContent = "";
   try { state.item = await rpc("bk_inbox_item", { p_project: id }); }
-  catch (_) { $("#facts").innerHTML = `<p class="ib-empty">Couldn't open this one.</p>`; return; }
-  state.key = newKey();
+  catch (_) {
+    $("#facts").innerHTML = `<div class="ib-empty"><p>Couldn't open this one.</p><button type="button" class="btn btn-ghost retry">Try again</button></div>`;
+    $("#facts .retry").addEventListener("click", () => openItem(id));
+    return;
+  }
+  state.key = sendKeyFor(id);
   renderFacts(state.item);
   const p = state.item.project;
   $("#markBtn").textContent = p.inbox_handled_at ? "Mark unread" : "Mark handled";
@@ -156,13 +177,28 @@ function setDraft(text) {
   saveDraft();
 }
 $("#draft").addEventListener("input", () => { $("#draft").dataset.dirty = "1"; setDraft($("#draft").value); });
-$("#backBtn").addEventListener("click", () => { history.pushState({}, "", "/inbox/"); openList(); });
+$("#backBtn").addEventListener("click", () => { cancelSend(); history.pushState({}, "", "/inbox/"); openList(); });
 
-$("#sendBtn").addEventListener("click", async () => {
-  if (state.sending) return;
+// Send holds for 5 seconds with an Undo, so a stray tap never emails a client
+$("#sendBtn").addEventListener("click", () => {
+  if (state.sending || state.sendTimer) return;
   const body = $("#draft").value.trim();
   if (!body) { $("#draftErr").textContent = "Write something first."; return; }
-  state.sending = true; const btn = $("#sendBtn"); btn.disabled = true; btn.textContent = "Sending…";
+  const btn = $("#sendBtn"); btn.disabled = true; btn.textContent = "Sending in 5s";
+  $("#undoSend").hidden = false; $("#draft").readOnly = true;
+  let left = SEND_DELAY_MS / 1000;
+  state.tick = setInterval(() => { left -= 1; if (left > 0) btn.textContent = `Sending in ${left}s`; }, 1000);
+  state.sendTimer = setTimeout(() => { clearInterval(state.tick); state.sendTimer = null; $("#undoSend").hidden = true; doSend(body); }, SEND_DELAY_MS);
+});
+function cancelSend() {
+  if (!state.sendTimer) return;
+  clearTimeout(state.sendTimer); clearInterval(state.tick); state.sendTimer = null;
+  $("#undoSend").hidden = true; $("#draft").readOnly = false;
+  const btn = $("#sendBtn"); btn.disabled = false; btn.textContent = "Send email";
+}
+$("#undoSend").addEventListener("click", () => { cancelSend(); toast("Not sent"); });
+async function doSend(body) {
+  state.sending = true; const btn = $("#sendBtn"); btn.textContent = "Sending…";
   try {
     await rpc("bk_inbox_send", { p_project: state.item.project.id, p_body: body, p_key: state.key });
     clearDraft(state.item.project.id);
@@ -170,9 +206,10 @@ $("#sendBtn").addEventListener("click", async () => {
     history.pushState({}, "", "/inbox/"); await openList();
   } catch (e) {
     $("#draftErr").textContent = e.message || "Couldn't send. Your reply is still here, so try again.";
-  } finally { state.sending = false; btn.disabled = false; btn.textContent = "Send email"; }
-});
+  } finally { state.sending = false; btn.disabled = false; btn.textContent = "Send email"; $("#draft").readOnly = false; }
+}
 $("#smsBtn").addEventListener("click", () => { state.pendingText = true; });
+$("#callBtn").addEventListener("click", () => { state.pendingText = true; });
 $("#sentItYes").addEventListener("click", () => mark(true));
 $("#sentItNo").addEventListener("click", () => { $("#sentIt").hidden = true; });
 $("#markBtn").addEventListener("click", () => mark(!state.item.project.inbox_handled_at));
@@ -197,11 +234,12 @@ async function setupAlertsButton() {
   const support = pushSupport(env());
   if (support === "install") {
     btn.textContent = "Get alerts"; note.hidden = true;
-    btn.onclick = () => { note.hidden = false; note.textContent = "Tap Share, then Add to Home Screen. Open Inbox from your home screen and turn on alerts there."; };
+    btn.onclick = () => { note.hidden = false; note.textContent = "Tap Share, then Add to Home Screen. Open Inbox from your home screen, sign in once more there, and turn on alerts."; };
     return;
   }
   if (support === "unsupported") { btn.hidden = true; return; }
-  const reg = await navigator.serviceWorker.register("/inbox/sw.js", { scope: "/inbox/" });
+  await navigator.serviceWorker.register("/inbox/sw.js", { scope: "/inbox/" });
+  const reg = await navigator.serviceWorker.ready; // subscribe on an ACTIVE worker (first install)
   const sub = await reg.pushManager.getSubscription();
   btn.textContent = sub && Notification.permission === "granted" ? "Alerts on ✓" : "Turn on alerts";
   btn.onclick = () => enableAlerts(reg);
@@ -213,11 +251,15 @@ async function enableAlerts(reg) {
     if (perm !== "granted") { note.hidden = false; note.textContent = "Alerts are blocked. Turn them on in Settings → Notifications → Inbox."; return; }
     const key = await rpc("bk_inbox_vapid_key", {});
     if (!key) { note.hidden = false; note.textContent = "Alerts aren't set up on the server yet."; return; }
-    const sub = (await reg.pushManager.getSubscription()) ||
-      (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8Array(key) }));
+    const appKey = urlB64ToUint8Array(key);
+    let sub = await reg.pushManager.getSubscription();
+    // a subscription made with an old server key would silently never deliver: replace it
+    if (sub && sub.options && sub.options.applicationServerKey &&
+        new Uint8Array(sub.options.applicationServerKey).join() !== appKey.join()) { await sub.unsubscribe(); sub = null; }
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey });
     const j = sub.toJSON();
     await rpc("bk_inbox_subscribe", { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_ua: navigator.userAgent });
-    await reg.showNotification("✅ Inbox alerts are on", { body: "You'll feel a buzz like this for every booking and inquiry.", icon: "/assets/img/inbox-192.png" });
+    await reg.showNotification("✅ Inbox alerts are on", { body: "You'll get one of these for every inquiry, payment and client message.", icon: "/assets/img/inbox-192.png" });
     $("#alertsBtn").textContent = "Alerts on ✓"; note.hidden = true;
   } catch (e) {
     note.hidden = false; note.textContent = "Couldn't turn on alerts: " + (e.message || "unknown error");

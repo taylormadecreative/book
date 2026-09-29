@@ -55,8 +55,10 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-body);
 .ib-count { font-family: var(--font-mono); font-size: 0.7rem; color: var(--faint); }
 #draft { width: 100%; box-sizing: border-box; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 12px; font: 16px/1.55 var(--font-body); resize: vertical; }
 .ib-tpl { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
-.ib-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.ib-actions #sendBtn { grid-column: 1 / -1; }
+/* actions stay reachable on long threads and above the keyboard */
+.ib-actions { position: sticky; bottom: 0; z-index: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: var(--bg-2); padding: 10px 0 calc(10px + env(safe-area-inset-bottom)); }
+.ib-actions #sendBtn, .ib-actions #undoSend { grid-column: 1 / -1; }
+.ib-empty .retry { margin-top: 12px; }
 .ib-actions .btn { text-align: center; min-height: 48px; }
 .ib-sent-it { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; padding: 12px; border: 1px dashed var(--gold); border-radius: 12px; }
 

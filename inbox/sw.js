@@ -20,7 +20,9 @@ self.addEventListener("notificationclick", (e) => {
   const url = new URL((e.notification.data && e.notification.data.url) || "/inbox/", self.location.origin).href;
   e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
     for (const w of wins) {
-      if (w.url.includes("/inbox/")) { return w.navigate(url).then((c) => (c || w).focus()); }
+      if (w.url.includes("/inbox/")) {
+        return w.navigate(url).then((c) => (c || w).focus()).catch(() => self.clients.openWindow(url));
+      }
     }
     return self.clients.openWindow(url);
   }));
