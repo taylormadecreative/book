@@ -1,6 +1,7 @@
 /* Taylormade — Inbox app: alerts + replies pre-filled from real booking data. Spec: docs/superpowers/specs/2026-09-23-inbox-app-design.md */
 import { esc, fmtWhen, fmtDay, smsHref, telHref, pushSupport, newKey, urlB64ToUint8Array, listRowHtml, whatLabel } from "./inbox-view.js";
 import { buildDraft, draftOptions } from "./inbox-drafts.js";
+import { initPitches } from "./inbox-pitches.js";
 
 const sb = window.supabase.createClient(window.BK.SUPABASE_URL, window.BK.SUPABASE_KEY);
 const $ = (s) => document.querySelector(s);
@@ -11,7 +12,8 @@ function toast(msg) {
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2600);
 }
-function show(id) { ["#loginView", "#listView", "#detailView"].forEach((v) => { $(v).hidden = v !== id; }); }
+const VIEWS = ["#loginView", "#listView", "#detailView", "#pitchesView", "#pitchView", "#pitchEditView"];
+function show(id) { VIEWS.forEach((v) => { $(v).hidden = v !== id; }); }
 const draftKey = (id) => `inbox-draft:${id}`;
 function saveDraft() { try { if (state.item) sessionStorage.setItem(draftKey(state.item.project.id), $("#draft").value); } catch (_) { /* private mode */ } }
 function loadDraft(id) { try { return sessionStorage.getItem(draftKey(id)); } catch (_) { return null; } }
@@ -35,6 +37,7 @@ async function rpc(fn, args, retried = false) {
   }
   return data;
 }
+const pitches = initPitches({ sb, rpc, show, toast, $ });
 
 /* ---------- auth ---------- */
 $("#loginForm").addEventListener("submit", async (e) => {
@@ -55,7 +58,10 @@ $("#logoutBtn").addEventListener("click", async () => { await sb.auth.signOut();
 async function route() {
   const { data } = await sb.auth.getSession();
   if (!data.session) { show("#loginView"); return; }
-  const id = new URLSearchParams(location.search).get("p");
+  const qs = new URLSearchParams(location.search);
+  if (qs.get("pitch")) { clearInterval(state.poll); await pitches.openPitch(qs.get("pitch")); return; }
+  if (qs.get("view") === "pitches") { clearInterval(state.poll); await pitches.openPitches(); return; }
+  const id = qs.get("p");
   if (id) await openItem(id); else await openList();
 }
 window.addEventListener("popstate", route);
@@ -90,10 +96,13 @@ async function loadList(more = false) {
     }
   }
 }
-document.querySelectorAll(".chip").forEach((c) => c.addEventListener("click", () => {
-  document.querySelectorAll(".chip").forEach((x) => x.classList.toggle("on", x === c));
+document.querySelectorAll("#listView .chip[data-filter]").forEach((c) => c.addEventListener("click", () => {
+  document.querySelectorAll("#listView .chip[data-filter]").forEach((x) => x.classList.toggle("on", x === c));
   state.filter = c.dataset.filter; loadList();
 }));
+$("#pitchesNav").addEventListener("click", (e) => {
+  e.preventDefault(); clearInterval(state.poll); history.pushState({}, "", "?view=pitches"); pitches.openPitches();
+});
 $("#moreBtn").addEventListener("click", () => loadList(true));
 $("#list").addEventListener("click", (e) => {
   if (e.target.closest("button.retry")) { loadList(); return; }

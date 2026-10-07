@@ -42,6 +42,7 @@
     <nav class="ib-chips" aria-label="Filter">
       <button type="button" class="chip on" data-filter="needs">Needs reply</button>
       <button type="button" class="chip" data-filter="all">All</button>
+      <a class="chip" id="pitchesNav" href="?view=pitches">Pitches</a>
     </nav>
     <div id="list" class="ib-list" aria-live="polite"></div>
     <button type="button" class="btn btn-ghost ib-more" id="moreBtn" hidden>Load more</button>
@@ -75,6 +76,55 @@
         <button type="button" class="linkish" id="sentItNo">Not yet</button>
       </div>
     </section>
+  </main>
+
+  <!-- pitches list -->
+  <main class="ib-app" id="pitchesView" hidden>
+    <header class="ib-bar">
+      <button type="button" class="ib-back" id="ptInboxBtn" aria-label="Back to inbox">‹ Inbox</button>
+      <span class="ib-brand">PITCHES</span>
+    </header>
+    <nav class="ib-chips" aria-label="Pitch filter">
+      <button type="button" class="chip on" data-pfilter="review">To review</button>
+      <button type="button" class="chip" data-pfilter="active">In flight</button>
+      <button type="button" class="chip" data-pfilter="all">All</button>
+    </nav>
+    <div id="ptList" class="ib-list" aria-live="polite"></div>
+  </main>
+
+  <!-- one pitch -->
+  <main class="ib-app" id="pitchView" hidden>
+    <header class="ib-bar">
+      <button type="button" class="ib-back" id="ptBack" aria-label="Back to pitches">‹ Pitches</button>
+      <span class="pt-status" id="ptStatus"></span>
+    </header>
+    <div id="ptDetail"></div>
+    <section class="pt-actions" id="ptActions" hidden>
+      <p class="pt-note" id="ptNote"></p>
+      <p class="ib-err" id="ptErr" role="alert"></p>
+      <div class="ib-actions">
+        <button type="button" class="btn btn-gold" id="ptApprove">Approve</button>
+        <button type="button" class="btn btn-ghost" id="ptStop" hidden>Stop follow-ups</button>
+        <button type="button" class="btn btn-ghost" id="ptUndo" hidden>Undo</button>
+        <button type="button" class="btn btn-gold" id="ptCopyDm" hidden>Copy DM &amp; open Instagram</button>
+        <button type="button" class="btn btn-ghost" id="ptDmSent" hidden>I sent it</button>
+        <button type="button" class="btn btn-ghost" id="ptUnapprove" hidden>Take back approval</button>
+        <button type="button" class="btn btn-ghost" id="ptEdit">Edit</button>
+        <button type="button" class="btn btn-ghost" id="ptSkip">Skip</button>
+      </div>
+      <div class="ib-tpl" id="ptSkipReasons" role="group" aria-label="Why skip?" hidden></div>
+    </section>
+  </main>
+
+  <!-- edit a pitch -->
+  <main class="ib-app" id="pitchEditView" hidden>
+    <header class="ib-bar">
+      <button type="button" class="ib-back" id="peCancel">‹ Cancel</button>
+      <span class="ib-brand" id="peTitle">Edit</span>
+    </header>
+    <form id="peForm" class="pt-form"></form>
+    <p class="ib-err" id="peErr" role="alert"></p>
+    <div class="ib-actions"><button type="button" class="btn btn-gold" id="peSave">Save &amp; re-render</button></div>
   </main>
 
   <div class="ib-toast" id="toast" role="status" aria-live="polite"></div>
