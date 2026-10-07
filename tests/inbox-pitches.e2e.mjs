@@ -26,7 +26,7 @@ const PITCH = { id: ID, channel: "email", status: "ready", offer_id: "content-da
   score: { need: { n: 3, why: "launch", url: "https://example.com/a" }, money: { n: 2, why: "<b>x</b>", url: "javascript:alert(1)" },
     timing: { n: 3, why: "now", url: "https://example.com/t" }, reach: { n: 2, why: "owner email", url: "https://example.com/r" }, warmth: { n: 0, why: "cold", url: "" }, total: 10 },
   subject: PARTS.subject, email_html: "<html><body><p>Hi Sam,</p><script>parent.pwned=1</script></body></html>", fu1_html: "<p>F1</p>", fu2_html: "<p>F2</p>",
-  dm_text: null, shots: ["p1/phone.jpg", "p1/desktop.jpg"], samples: [] };
+  dm_text: null, shots: ["p1/phone-01.jpg", "p1/phone-02.jpg", "p1/desktop.jpg"], samples: [] };
 PITCH.content_hash = hash(PITCH);
 const ITEM = { pitch: PITCH, prospect: { org: EVIL, lane: "small_business", contact_name: "Sam", contact_role: "Owner", email: "sam@layerloaf.example",
   email_source_url: "https://layerloaf.example/about", instagram: "layerloaf" }, events: [], settings: { shadow: true, paused: false } };
@@ -89,7 +89,14 @@ await page.waitForTimeout(400);
 if (await page.evaluate(() => window.pwned)) await fail("email HTML or org ran script in the app");
 if (await page.locator('.pt-score a[href^="javascript"]').count()) await fail("javascript: source link rendered");
 if (!(await page.textContent("#ptDetail")).includes("Preview mode")) await fail("preview-mode banner missing");
-if (await page.locator(".pt-shots img").count() !== 2) await fail("proposal screenshots missing");
+if (await page.locator(".pt-phone-scroll img").count() !== 2) await fail("phone segments missing from the phone window");
+if (await page.locator(".pt-desk img").count() !== 1) await fail("desktop view missing");
+const shotCss = await page.evaluate(() => {
+  const win = document.querySelector(".pt-phone-scroll"), cs = getComputedStyle(win);
+  const fits = [...document.querySelectorAll(".pt-phone-scroll img, .pt-desk img")].map((i) => getComputedStyle(i).objectFit);
+  return { scrolls: cs.overflowY === "auto" || cs.overflowY === "scroll", capped: cs.maxHeight !== "none", cropped: fits.some((f) => f === "cover") };
+});
+if (!shotCss.scrolls || !shotCss.capped || shotCss.cropped) await fail("proposal captures cropped or not in a scrolling window: " + JSON.stringify(shotCss));
 if (await page.isDisabled("#ptApprove")) await fail("Approve disabled although the hash matches");
 if (await page.isVisible("#ptStop")) await fail("Stop follow-ups shown on a pitch that hasn't been sent");
 if (await sideways()) await fail("detail scrolls sideways");

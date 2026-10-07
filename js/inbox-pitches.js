@@ -2,7 +2,7 @@
    Approve sends the hash of what was shown, and the server refuses anything else. */
 import { esc } from "./inbox-view.js";
 import { OFFER, LANE, STATUS, SKIP_REASONS, hashInput, sha256Hex, safeHref, igHref, splitParas, joinParas,
-  pitchRowHtml, scoreHtml, timelineHtml, mailFrame, pitchActions } from "./inbox-pitches-view.js";
+  pitchRowHtml, scoreHtml, timelineHtml, mailFrame, pitchActions, shotsHtml } from "./inbox-pitches-view.js";
 
 const UNDO_DELAY_MS = 5000;
 const KEYS = [["email", "First email"], ["fu1", "Follow-up 1"], ["fu2", "Follow-up 2"]];
@@ -55,7 +55,7 @@ export function initPitches({ sb, rpc, show, toast, $ }) {
 
   async function signed(paths) {
     if (!paths?.length) return [];
-    try { const { data } = await sb.storage.from("outreach").createSignedUrls(paths, 900); return (data ?? []).map((d) => d.signedUrl).filter(Boolean); }
+    try { const { data } = await sb.storage.from("outreach").createSignedUrls(paths, 900); return (data ?? []).filter((d) => d.signedUrl).map((d) => ({ path: d.path, url: d.signedUrl })); }
     catch (_) { return []; }
   }
 
@@ -84,8 +84,8 @@ export function initPitches({ sb, rpc, show, toast, $ }) {
         <details class="pt-fu"><summary>Follow-up 1 · 4 business days later</summary><p class="pt-subject"><span>Subject</span> Re: ${esc(p.subject)}</p>${mailFrame(p.fu1_html, "Follow-up 1")}</details>
         <details class="pt-fu"><summary>Follow-up 2 · 6 business days after that</summary><p class="pt-subject"><span>Subject</span> Re: ${esc(p.subject)}</p>${mailFrame(p.fu2_html, "Follow-up 2")}</details>`
       : `<h2 class="pt-h">Instagram DM</h2><pre class="pt-dm">${esc(p.dm_text)}</pre>`}
-      ${shots.length ? `<h2 class="pt-h">Their proposal page</h2><div class="pt-shots">${shots.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="${i ? "Desktop" : "Phone"} view of the proposal page" loading="lazy"></a>`).join("")}</div>` : ""}
-      ${samples.length ? `<h2 class="pt-h">Sample work made for them</h2><div class="pt-shots">${samples.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="Concept made for ${esc(pr.org)}" loading="lazy"></a>`).join("")}</div>` : ""}
+      ${shots.length ? `<h2 class="pt-h">Their proposal page</h2><div class="pt-proposal">${shotsHtml(shots)}</div>` : ""}
+      ${samples.length ? `<h2 class="pt-h">Sample work made for them</h2><div class="pt-shots">${samples.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener"><img src="${esc(s.url)}" alt="Concept made for ${esc(pr.org)}" loading="lazy"></a>`).join("")}</div>` : ""}
       ${timelineHtml(events)}`;
     renderActions();
   }

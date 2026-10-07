@@ -1,5 +1,5 @@
 import { assertEquals, assertStringIncludes, assert } from "jsr:@std/assert@1";
-import { hashInput, sha256Hex, safeHref, igHref, gmailHref, splitParas, joinParas, pitchRowHtml, scoreHtml, timelineHtml, mailFrame, previewDoc, pitchActions } from "../js/inbox-pitches-view.js";
+import { hashInput, sha256Hex, safeHref, igHref, gmailHref, splitParas, joinParas, pitchRowHtml, scoreHtml, timelineHtml, mailFrame, previewDoc, pitchActions, shotsHtml } from "../js/inbox-pitches-view.js";
 
 Deno.test("sha256Hex", async () => {
   assertEquals(await sha256Hex("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
@@ -60,4 +60,17 @@ Deno.test("actions by status: Skip while an edit re-renders, Stop only while fol
   assertEquals(on("sent"), "any,stop");
   for (const st of ["sending", "done", "cancelled", "skipped"]) assertEquals(on(st), "", st);
   assertEquals(pitchActions("sent", "dm").stop, false);
+});
+
+Deno.test("proposal captures: phone segments stack in one scrolling phone window, in order; the desktop view stands alone, uncropped", () => {
+  const h = shotsHtml([{ path: "p/phone-01.jpg", url: "https://s/1" }, { path: "p/phone-02.jpg", url: "https://s/2" }, { path: "p/desktop.jpg", url: "https://s/d" }]);
+  const phone = h.slice(h.indexOf('class="pt-phone-scroll"'), h.indexOf("</div>"));
+  assert(phone.indexOf("https://s/1") >= 0 && phone.indexOf("https://s/1") < phone.indexOf("https://s/2"));
+  assert(!phone.includes("https://s/d"));
+  assertStringIncludes(h.slice(h.indexOf('class="pt-desk"')), "https://s/d");
+});
+Deno.test("proposal captures: an older single phone.jpg still shows; nothing at all renders nothing; urls are escaped", () => {
+  assertStringIncludes(shotsHtml([{ path: "p/phone.jpg", url: "https://s/1" }]), 'class="pt-phone-scroll"');
+  assertEquals(shotsHtml([]), "");
+  assert(!shotsHtml([{ path: "p/phone-01.jpg", url: 'https://s/"><script>' }]).includes("<script>"));
 });

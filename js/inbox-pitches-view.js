@@ -21,6 +21,18 @@ export async function sha256Hex(s) {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// proposal captures [{ path, url }]: phone segments (phone-01.jpg…, or one older phone.jpg) stack in one phone-sized window you
+// scroll through; the desktop view shows whole. Nothing is cropped.
+export function shotsHtml(shots) {
+  const isDesk = (s) => /\/desktop\.jpg$/.test(s.path);
+  const phone = shots.filter((s) => !isDesk(s)), desk = shots.filter(isDesk);
+  const img = (s, alt) => `<img src="${esc(s.url)}" alt="${esc(alt)}" loading="lazy">`;
+  return (phone.length ? `<figure class="pt-phone"><div class="pt-phone-scroll" tabindex="0" role="region" aria-label="Phone view of the proposal page">${
+      phone.map((s, i) => img(s, i ? "" : "Phone view of the proposal page")).join("")}</div><figcaption>Phone · scroll inside to read it all</figcaption></figure>` : "")
+    + (desk.length ? `<figure class="pt-desk"><a href="${esc(desk[0].url)}" target="_blank" rel="noopener">${img(desk[0], "Desktop view of the proposal page")}</a>`
+      + `<figcaption>Desktop · first screen</figcaption></figure>` : "");
+}
+
 export function safeHref(u) { return /^https:\/\/[^\s"'<>]+$/i.test(String(u ?? "")) ? String(u) : null; }
 export function igHref(h) { return /^[A-Za-z0-9._]{1,30}$/.test(String(h ?? "")) ? `https://www.instagram.com/${h}/` : null; }
 export function gmailHref(messageId) {

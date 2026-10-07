@@ -82,8 +82,14 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-body);
 .pt-fu { margin: 12px 0; }
 .pt-fu summary { cursor: pointer; min-height: 40px; display: flex; align-items: center; color: var(--muted); }
 .pt-dm { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px; font: inherit; }
-.pt-shots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.pt-shots img { width: 100%; height: 220px; object-fit: cover; object-position: top; border-radius: 10px; border: 1px solid var(--line); display: block; }
+.pt-shots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.pt-shots img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); display: block; }
+.pt-proposal { display: grid; gap: 18px; }
+.pt-proposal figure { margin: 0; }
+.pt-proposal figcaption { color: var(--muted); font-size: 0.8rem; text-align: center; margin-top: 6px; }
+.pt-phone-scroll { width: min(100%, 390px); margin: 0 auto; max-height: min(64vh, 720px); overflow-y: auto; border-radius: 22px; border: 1px solid var(--line); background: #000; }
+.pt-phone-scroll img { display: block; width: 100%; height: auto; }
+.pt-desk img { display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); }
 .pt-timeline { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; font-size: 0.88rem; color: var(--muted); }
 .pt-timeline span { display: inline-block; min-width: 3ch; color: var(--text); }
 .pt-actions { position: sticky; bottom: 0; background: linear-gradient(transparent, var(--bg) 30%); padding: 18px 0 calc(8px + env(safe-area-inset-bottom)); }
