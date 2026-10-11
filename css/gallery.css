@@ -283,7 +283,7 @@
 }
 
 /* portal media card (full-width under the grid) */
-.media-card { margin-top: 0; scroll-margin-top: 1rem; }
+.media-card { margin-top: 0; scroll-margin-top: 5.5rem; } /* clear the sticky top bar */
 .media-card.media-first { margin-bottom: 1.4rem; }
 .media-login {
   margin: 1.6rem 0 0;
