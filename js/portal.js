@@ -83,16 +83,22 @@ function render(data) {
 
   // details
   const fmtDate = (d) => d ? new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }) : "TBD";
+  // once the shoot day has passed, an unfilled call time / location is just noise, not "TBD"
+  const shot = p.event_date && new Date(p.event_date + "T23:59:59") < new Date();
+  const row = (label, val) => val || !shot ? `<div><span>${label}</span><strong>${esc(val || "TBD")}</strong></div>` : "";
   $("#pDetails").innerHTML = `
     <div><span>Service</span><strong>${esc(SERVICES[p.service] || p.service)}</strong></div>
     <div><span>Shoot date</span><strong>${fmtDate(p.event_date)}</strong></div>
-    <div><span>Call time</span><strong>${esc(p.event_time || "TBD")}</strong></div>
-    <div><span>Location</span><strong>${esc(p.location || "TBD")}</strong></div>`;
+    ${row("Call time", p.event_time)}
+    ${row("Location", p.location)}`;
 
   // invoices — skip rebuild while a checkout request is in flight (a disabled
   // Pay button must not be replaced by a fresh enabled one mid-request)
   const money = (c) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
   const paying = sessionStorage.getItem("bk_paying");
+  // booked or later with nothing billed here (paid another way): no empty "your quote lands here" card
+  $("#pInvoices").closest(".pcard").hidden =
+    !data.invoices.length && ["booked", "in_production", "delivered"].includes(p.status);
   if (!$("#pInvoices").querySelector("[data-pay][disabled]")) $("#pInvoices").innerHTML = data.invoices.length
     ? data.invoices.map((inv) => {
         if (inv.status === "paid" && inv.id === paying) sessionStorage.removeItem("bk_paying");
