@@ -42,8 +42,16 @@ function mountMedia() {
   if (!window.BKGallery) return;
   const root = $("#galleryRoot");
   if (!root) return;
-  $("#mediaCard").hidden = false;
-  BKGallery.mount(root, { mode: "token", project_id: PID, token: TOKEN });
+  const card = $("#mediaCard");
+  card.hidden = false;
+  BKGallery.mount(root, { mode: "token", project_id: PID, token: TOKEN }).then((r) => {
+    // photos waiting on picks are the reason they opened the link: put them first
+    if (r && r.openProof) {
+      card.classList.add("media-first");
+      $("#tracker").after(card);
+    }
+    if (location.hash === "#photos") card.scrollIntoView({ block: "start" });
+  });
 }
 
 function fail() {
@@ -163,7 +171,7 @@ function render(data) {
     scroll.innerHTML = data.messages.length
       ? data.messages.map((m) => `
         <div class="msg ${m.sender}">
-          ${esc(m.body)}
+          <span class="msg-body">${esc(m.body)}</span>
           <time>${m.sender === "studio" ? "Nelson" : "You"} · ${new Date(m.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</time>
         </div>`).join("")
       : `<div class="chat-empty">No messages yet. Say what's up — this goes straight to Nelson.</div>`;

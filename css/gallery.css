@@ -33,46 +33,72 @@
   margin: 0.35rem 0 0;
 }
 
+.g-intro { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.95rem; max-width: 52ch; }
+.g-intro b { color: var(--gold); font-weight: 600; }
+
+/* All / Picked filter */
+.g-tools { display: inline-flex; gap: 0.25rem; padding: 0.25rem; margin-bottom: 0.9rem; border: 1px solid var(--line); border-radius: 999px; }
+.g-tools button {
+  border: 0; background: none; color: var(--muted);
+  font-size: 0.85rem; font-weight: 600;
+  padding: 0.45em 1.05em; min-height: 36px; border-radius: 999px;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease);
+}
+.g-tools button span { opacity: 0.7; font-weight: 500; margin-left: 0.25em; }
+.g-tools button:hover { color: var(--text); }
+.g-tools button[aria-pressed="true"] { background: var(--gold); color: #0a0903; }
+
 /* photo grid (proof + final) */
 .g-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 0.5rem;
 }
+@media (max-width: 560px) { .g-grid { grid-template-columns: repeat(3, 1fr); gap: 0.3rem; } }
 .g-cell {
   position: relative;
   margin: 0;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: var(--g-ar, 1 / 1);
   overflow: hidden;
   background: var(--bg-3);
   border: 1px solid var(--line-soft);
 }
+.g-cell[hidden] { display: none; }
+.g-open { display: block; width: 100%; height: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.g-open:focus-visible { outline-offset: -3px; }
 .g-cell img {
   width: 100%; height: 100%;
   object-fit: cover;
   cursor: zoom-in;
   transition: transform 0.5s var(--ease), opacity 0.3s var(--ease);
 }
-.g-cell:hover img { transform: scale(1.04); }
+@media (hover: hover) { .g-cell:hover img { transform: scale(1.04); } }
 .g-cell.sel { border-color: var(--gold); box-shadow: inset 0 0 0 3px var(--gold); }
 
 /* proof pick button */
 .g-pick {
   position: absolute;
-  top: 8px; right: 8px;
+  top: 0; right: 0;
+  width: 44px; height: 44px;
+  padding: 0; border: 0; background: none;
+  display: grid;
+  place-items: center;
+}
+.g-pick span {
   width: 30px; height: 30px;
   border-radius: 50%;
-  border: 1.5px solid rgba(244, 241, 234, 0.7);
+  border: 1.5px solid rgba(244, 241, 234, 0.8);
   background: rgba(8, 8, 10, 0.5);
   color: transparent;
   font-size: 0.85rem;
   display: grid;
   place-items: center;
-  transition: all 0.2s var(--ease);
+  transition: background 0.2s var(--ease), border-color 0.2s var(--ease), color 0.2s var(--ease), transform 0.15s var(--ease);
   backdrop-filter: blur(4px);
 }
-.g-pick:active { transform: scale(0.9); }
-.g-cell.sel .g-pick {
+.g-pick:active span { transform: scale(0.88); }
+.g-pick:focus-visible { outline-offset: -4px; }
+.g-cell.sel .g-pick span {
   background: var(--gold);
   border-color: var(--gold);
   color: #0a0903;
@@ -102,19 +128,26 @@
 .g-selbar {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  justify-content: space-between;
+  gap: 0.8rem 1rem;
   flex-wrap: wrap;
   margin-top: 1rem;
-  padding-top: 1rem;
+  padding: 0.9rem 0 calc(0.9rem + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--line-soft);
 }
-.g-count {
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--gold);
+/* once something is picked the bar rides along the bottom while the grid is on screen */
+.g-selbar.live {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: rgba(14, 14, 18, 0.94);
+  backdrop-filter: blur(8px);
+  border-top-color: rgba(233, 185, 73, 0.35);
 }
+.g-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.g-actions .btn { padding: 0.6em 1.2em; font-size: 0.85rem; }
+.g-confirm { font-size: 0.92rem; color: var(--text); }
+.g-count { font-size: 0.95rem; font-weight: 600; color: var(--gold); }
 .g-selnote { font-size: 0.82rem; color: var(--muted); }
 
 /* video */
@@ -142,7 +175,7 @@
   padding: 0.7rem 1.3rem;
   border-radius: 999px;
   font-size: 0.85rem;
-  z-index: 600;
+  z-index: 800; /* above the lightbox */
   transition: transform 0.35s var(--ease);
 }
 .g-toast.show { transform: translateX(-50%) translateY(0); }
@@ -152,17 +185,22 @@
   position: fixed;
   inset: 0;
   z-index: 700;
-  background: rgba(8, 8, 10, 0.95);
+  background: var(--bg);
   display: grid;
-  place-items: center;
-  padding: 4vh 4vw;
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 .g-lightbox[hidden] { display: none; }
-.g-lightbox img { max-width: 100%; max-height: 84vh; object-fit: contain; }
+.g-lb-top {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.8rem 1rem 0.4rem 1.2rem;
+}
+.g-lb-count { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); font-size: 0.95rem; }
+.g-lb-name { flex: 1; min-width: 0; color: var(--faint); font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .g-lb-close {
-  position: absolute;
-  top: 1.2rem; right: 1.4rem;
   width: 44px; height: 44px;
+  flex: 0 0 auto;
   border-radius: 50%;
   background: none;
   border: 1px solid var(--line);
@@ -171,14 +209,82 @@
   transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
 }
 .g-lb-close:hover { border-color: var(--gold); color: var(--gold); }
-.g-lb-cap {
+.g-lb-stage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+/* the photo box fills the stage and the picture is contained inside it
+   (Safari won't resolve a % max-height on an image inside a grid row) */
+.g-lb-stage img {
   position: absolute;
-  bottom: 1.4rem; left: 0; right: 0;
-  text-align: center;
+  inset: 0 4.6rem;
+  width: calc(100% - 9.2rem);
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.g-lb-nav {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: rgba(21, 21, 27, 0.7);
+  color: var(--text);
+  font-size: 1.8rem;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
+}
+.g-lb-nav[hidden] { display: none; }
+.g-lb-nav.prev { left: 0.8rem; }
+.g-lb-nav.next { right: 0.8rem; }
+.g-lb-nav:hover { border-color: var(--gold); color: var(--gold); }
+.g-lb-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem 1.2rem;
+  flex-wrap: wrap;
+  min-height: 64px;
+  padding: 0.7rem 1rem calc(0.9rem + env(safe-area-inset-bottom, 0px));
+}
+.g-lb-pick {
+  min-height: 48px;
+  min-width: 190px;
+  padding: 0 1.6rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--gold);
+  background: transparent;
+  color: var(--gold);
+  font-size: 1rem;
+  font-weight: 600;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease), transform 0.15s var(--ease);
+}
+.g-lb-pick:hover { background: var(--gold-soft); }
+.g-lb-pick:active { transform: scale(0.97); }
+.g-lb-pick.on { background: var(--gold); color: #0a0903; }
+.g-lb-tally { color: var(--muted); font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.g-lb-dl { padding: 0.6em 1.4em; }
+@media (hover: none) { .g-lb-hint { display: none; } }
+/* phones: swipe does the browsing, so the photo gets the whole width */
+@media (max-width: 640px) {
+  .g-lb-stage img { inset: 0 0.4rem; width: calc(100% - 0.8rem); }
+  .g-lb-nav { display: none; }
+  .g-lb-pick { flex: 1 1 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .g-cell img, .g-pick span, .g-lb-pick, .g-toast { transition: none; }
 }
 
 /* portal media card (full-width under the grid) */
-.media-card { margin-top: 0; }
+.media-card { margin-top: 0; scroll-margin-top: 1rem; }
+.media-card.media-first { margin-bottom: 1.4rem; }
 .media-login {
   margin: 1.6rem 0 0;
   padding-top: 1.2rem;

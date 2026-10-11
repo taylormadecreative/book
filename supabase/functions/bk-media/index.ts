@@ -53,14 +53,34 @@ async function resolveAccess(req: Request, body: any, db: ReturnType<typeof svc>
   return { staff: false, projectIds: new Set<string>() };
 }
 
-async function signItems(db: ReturnType<typeof svc>, items: any[]) {
+// Grid thumbnails live next to the original under a thumbs/ folder (same file name).
+// Older uploads have none; the client falls back to the full image.
+const thumbPath = (p: string) => p.replace(/([^/]+)$/, "thumbs/$1");
+
+// Batch-sign: one storage call for every inline URL and one for every thumb,
+// instead of one call per item (a 400-photo proofing gallery would be 800+ calls).
+async function signItems(db: ReturnType<typeof svc>, items: any[], kindByGallery: Record<string, string>) {
+  if (!items.length) return [];
+  const bucket = db.storage.from(BUCKET);
+  const paths = items.map((it) => it.storage_path);
+  const [inline, thumbs] = await Promise.all([
+    bucket.createSignedUrls(paths, SIGN_TTL),
+    bucket.createSignedUrls(paths.map(thumbPath), SIGN_TTL),
+  ]);
+  // match results by path (missing thumbs come back as per-path errors, not a failed batch)
+  const byPath = (r: any) => new Map<string, string | null>((r.data || []).map((d: any) => [d.path, d.signedUrl || null]));
+  const inlineBy = byPath(inline), thumbBy = byPath(thumbs);
   return Promise.all(items.map(async (it) => {
-    const inline = await db.storage.from(BUCKET).createSignedUrl(it.storage_path, SIGN_TTL);
-    const dl = await db.storage.from(BUCKET).createSignedUrl(it.storage_path, SIGN_TTL, { download: it.filename || "download" });
+    // proofs are for picking, not downloading; finals + video keep a named download link
+    let download_url: string | null = null;
+    if (kindByGallery[it.gallery_id] !== "proof") {
+      const dl = await bucket.createSignedUrl(it.storage_path, SIGN_TTL, { download: it.filename || "download" });
+      download_url = dl.data?.signedUrl || null;
+    }
     return {
       id: it.id, gallery_id: it.gallery_id, filename: it.filename, content_type: it.content_type,
       size_bytes: it.size_bytes, sort: it.sort, selected: it.selected,
-      url: inline.data?.signedUrl || null, download_url: dl.data?.signedUrl || null,
+      url: inlineBy.get(it.storage_path) ?? null, thumb_url: thumbBy.get(thumbPath(it.storage_path)) ?? null, download_url,
     };
   }));
 }
@@ -93,7 +113,9 @@ Deno.serve(async (req: Request) => {
       const { data: galleries } = await db.from("bk_galleries").select("*").in("project_id", pids).order("created_at");
       const { data: items } = await db.from("bk_gallery_items").select("*")
         .in("project_id", pids).order("sort").order("created_at");
-      const signed = await signItems(db, items || []);
+      const kindByGallery: Record<string, string> = {};
+      for (const g of galleries || []) kindByGallery[g.id] = g.kind;
+      const signed = await signItems(db, items || [], kindByGallery);
       const byGallery: Record<string, any[]> = {};
       for (const s of signed) (byGallery[s.gallery_id] ||= []).push(s);
 
@@ -137,7 +159,8 @@ Deno.serve(async (req: Request) => {
       if (gal.kind !== "proof") return json({ error: "not_selectable" }, 409);
       // idempotent: once submitted it stays locked — never re-message (blocks thread spam)
       if (gal.locked) return json({ error: "already_submitted" }, 409);
-      const { data: picks } = await db.from("bk_gallery_items").select("filename").eq("gallery_id", gal.id).eq("selected", true);
+      const { data: picks } = await db.from("bk_gallery_items").select("filename, sort")
+        .eq("gallery_id", gal.id).eq("selected", true).order("sort");
       const n = (picks || []).length;
       if (n === 0) return json({ error: "no_selection" }, 409);
       // lock only if still open (guards a concurrent double-submit race)
@@ -146,7 +169,9 @@ Deno.serve(async (req: Request) => {
       if (!locked || !locked.length) return json({ error: "already_submitted" }, 409);
       await db.from("bk_messages").insert({
         project_id: gal.project_id, sender: "client",
-        body: `Selected ${n} image${n === 1 ? "" : "s"} for editing from "${gal.title}". Ready when you are.`,
+        // list the picks by file name so the originals are easy to find for editing
+        body: `Selected ${n} image${n === 1 ? "" : "s"} for editing from "${gal.title}". Ready when you are.\n\n` +
+          (picks || []).map((p: any) => p.filename || "(unnamed)").join("\n"),
       });
       return json({ ok: true, count: n });
     }

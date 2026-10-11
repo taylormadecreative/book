@@ -157,6 +157,7 @@ body { font-size: 15px; }
 .msg time { display: block; font-family: var(--font-mono); font-size: 0.48rem; letter-spacing: 0.12em; color: var(--faint); margin-top: 0.35rem; text-transform: uppercase; }
 .msg.client { align-self: flex-start; background: var(--bg-3); border: 1px solid var(--line-soft); }
 .msg.studio { align-self: flex-end; background: var(--gold-soft); border: 1px solid rgba(233, 185, 73, 0.3); }
+.msg-body { white-space: pre-line; overflow-wrap: anywhere; }
 .achat form { display: flex; gap: 0.5rem; margin-top: 0.9rem; }
 .achat textarea {
   flex: 1;

@@ -265,7 +265,7 @@ function renderDetail(p, keepScroll = false) {
           <div class="achat">
             <div class="chat-scroll" id="achatScroll">
               ${msgs.length ? msgs.map((m) => `
-                <div class="msg ${m.sender}">${esc(m.body)}
+                <div class="msg ${m.sender}"><span class="msg-body">${esc(m.body)}</span>
                 <time>${m.sender === "studio" ? "You" : esc(p.client_name)} · ${new Date(m.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</time></div>`).join("")
                 : `<div style="color:var(--faint);font-size:0.85rem;margin:auto;">No messages yet.</div>`}
             </div>
@@ -318,6 +318,8 @@ function galleriesCard(p) {
       : `<span class="pill">${items.length} item${items.length === 1 ? "" : "s"}</span>`;
     const lockBtn = g.kind === "proof"
       ? `<button class="ga-lock" data-lock="${g.id}" data-on="${g.locked}">${g.locked ? "Locked" : "Open"}</button>` : "";
+    const copyBtn = g.kind === "proof" && sel
+      ? `<button class="ga-lock" data-copypicks="${g.id}" title="Copy the picked file names">Copy picks</button>` : "";
     const cells = isVideo
       ? items.map((it) => `
           <div class="ga-vrow" data-path="${esc(it.storage_path)}">
@@ -334,7 +336,7 @@ function galleriesCard(p) {
       <div class="ga">
         <div class="ga-head">
           <div><span class="hud">${GAL_KIND[g.kind] || g.kind}</span><b>${esc(g.title)}</b></div>
-          <div class="ga-meta">${meta}${lockBtn}<button class="ga-del" data-galdel="${g.id}" title="Delete gallery">&#10005;</button></div>
+          <div class="ga-meta">${meta}${copyBtn}${lockBtn}<button class="ga-del" data-galdel="${g.id}" title="Delete gallery">&#10005;</button></div>
         </div>
         <div class="${isVideo ? "ga-vlist" : "ga-grid"}">
           ${cells}
@@ -364,12 +366,53 @@ function galleriesCard(p) {
     </div>`;
 }
 
+// Grid thumbnails sit next to the original under thumbs/ (same name); older uploads have none.
+const thumbPath = (path) => path.replace(/([^/]+)$/, "thumbs/$1");
+
+// The detail pane re-renders on every 15s poll. Re-signing each time would hand the browser
+// brand-new URLs and re-download every photo, so keep each signed URL for most of its hour.
+const thumbCache = new Map(); // storage path → { url, exp }
 async function hydrateThumbs() {
-  const cells = [...$("#dpane").querySelectorAll("[data-path] img[data-ph]")];
-  if (!cells.length) return;
-  const paths = cells.map((img) => img.closest("[data-path]").dataset.path);
-  const { data } = await sb.storage.from("project-media").createSignedUrls(paths, 3600);
-  (data || []).forEach((d, i) => { if (d.signedUrl) cells[i].src = d.signedUrl; });
+  const imgs = [...$("#dpane").querySelectorAll("[data-path] img[data-ph]")];
+  if (!imgs.length) return;
+  const now = Date.now();
+  const fresh = (path) => { const c = thumbCache.get(path); return c && c.exp > now ? c.url : null; };
+  const need = [...new Set(imgs.map((img) => img.closest("[data-path]").dataset.path).filter((path) => !fresh(path)))];
+  if (need.length) {
+    const bucket = sb.storage.from("project-media");
+    const exp = now + 50 * 60 * 1000;
+    const { data: thumbs } = await bucket.createSignedUrls(need.map(thumbPath), 3600);
+    const missing = [];
+    need.forEach((path) => {
+      const t = (thumbs || []).find((d) => d.path === thumbPath(path));
+      if (t && t.signedUrl) thumbCache.set(path, { url: t.signedUrl, exp });
+      else missing.push(path);
+    });
+    if (missing.length) {
+      const { data: full } = await bucket.createSignedUrls(missing, 3600);
+      (full || []).forEach((d) => { if (d.signedUrl) thumbCache.set(d.path, { url: d.signedUrl, exp }); });
+    }
+  }
+  imgs.forEach((img) => {
+    const url = fresh(img.closest("[data-path]").dataset.path);
+    if (url) img.src = url;
+  });
+}
+
+// 480px-wide JPEG for the client + admin grids; null if the browser can't decode the file
+async function makeThumb(file) {
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 480 / bmp.width);
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * scale);
+    c.height = Math.round(bmp.height * scale);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    bmp.close?.();
+    return await new Promise((res) => c.toBlob(res, "image/jpeg", 0.74));
+  } catch (_) {
+    return null;
+  }
 }
 
 function safeName(name) {
@@ -400,6 +443,11 @@ async function uploadToGallery(p, galleryId, files) {
       contentType: file.type || "application/octet-stream", upsert: false,
     });
     if (up.error) { failed++; done++; show(); continue; }
+    if (gal?.kind !== "video" && /^image\//.test(file.type)) {
+      const thumb = await makeThumb(file);
+      // a missing thumb is fine: the grids fall back to the full image
+      if (thumb) await sb.storage.from("project-media").upload(thumbPath(key), thumb, { contentType: "image/jpeg", upsert: true });
+    }
     const ins = await sb.from("bk_gallery_items").insert({
       gallery_id: galleryId, project_id: p.id, storage_path: key,
       filename: file.name, content_type: file.type, size_bytes: file.size, sort: sort++,
@@ -510,9 +558,19 @@ function wireDetail(p) {
 
   $("#dpane").querySelectorAll("[data-itemdel]").forEach((b) => b.addEventListener("click", async () => {
     const cell = b.closest("[data-path]");
-    if (cell) await sb.storage.from("project-media").remove([cell.dataset.path]);
+    if (cell) await sb.storage.from("project-media").remove([cell.dataset.path, thumbPath(cell.dataset.path)]);
     await sb.from("bk_gallery_items").delete().eq("id", b.dataset.itemdel);
     await load();
+  }));
+
+  $("#dpane").querySelectorAll("[data-copypicks]").forEach((b) => b.addEventListener("click", async () => {
+    const gal = (p.bk_galleries || []).find((g) => g.id === b.dataset.copypicks);
+    const names = (gal?.bk_gallery_items || []).filter((i) => i.selected)
+      .sort((a, z) => a.sort - z.sort).map((i) => i.filename || i.storage_path.split("/").pop());
+    try {
+      await navigator.clipboard.writeText(names.join("\n"));
+      toast(`Copied ${names.length} file name${names.length === 1 ? "" : "s"}`);
+    } catch (_) { toast("Couldn't copy. Check clipboard permission."); }
   }));
 
   $("#dpane").querySelectorAll("[data-lock]").forEach((b) => b.addEventListener("click", async () => {
@@ -526,7 +584,7 @@ function wireDetail(p) {
     const gid = b.dataset.galdel;
     const gal = (p.bk_galleries || []).find((g) => g.id === gid);
     if (!confirm(`Delete "${gal?.title || "this gallery"}" and all its media? This cannot be undone.`)) return;
-    const paths = (gal?.bk_gallery_items || []).map((i) => i.storage_path);
+    const paths = (gal?.bk_gallery_items || []).flatMap((i) => [i.storage_path, thumbPath(i.storage_path)]);
     if (paths.length) await sb.storage.from("project-media").remove(paths);
     await sb.from("bk_galleries").delete().eq("id", gid); // cascades item rows
     toast("Gallery deleted");
