@@ -306,12 +306,19 @@ function renderDetail(p, keepScroll = false) {
 /* ---------------- galleries (photos & video) ---------------- */
 const GAL_KIND = { proof: "Proofing", final: "Edited photos", video: "Video" };
 
+// Once a client has picked, a proofing gallery leads with just the picks and folds the full set away.
+// Remember which full sets Nelson opened so the 15s re-render doesn't snap them shut.
+const galShowAll = new Set();
+// The name without ".jpg" — what Nelson searches for in Capture One to find the original.
+const pickName = (it) => (it.filename || it.storage_path.split("/").pop().replace(/^[0-9a-f-]{36}-/, "")).replace(/\.[^.]+$/, "");
+
 function galleriesCard(p) {
   const gals = (p.bk_galleries || []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
   const blocks = gals.length ? gals.map((g) => {
     const items = (g.bk_gallery_items || []).slice()
       .sort((a, b) => (a.sort - b.sort) || a.created_at.localeCompare(b.created_at));
-    const sel = items.filter((i) => i.selected).length;
+    const picks = g.kind === "proof" ? items.filter((i) => i.selected) : [];
+    const sel = picks.length;
     const isVideo = g.kind === "video";
     const meta = g.kind === "proof"
       ? `<span class="pill ${sel ? "gold" : ""}">${sel} selected${g.selection_limit != null ? ` / ${g.selection_limit}` : ""}</span>`
@@ -319,7 +326,7 @@ function galleriesCard(p) {
     const lockBtn = g.kind === "proof"
       ? `<button class="ga-lock" data-lock="${g.id}" data-on="${g.locked}">${g.locked ? "Locked" : "Open"}</button>` : "";
     const copyBtn = g.kind === "proof" && sel
-      ? `<button class="ga-lock" data-copypicks="${g.id}" title="Copy the picked file names">Copy picks</button>` : "";
+      ? `<button class="ga-lock" data-copypicks="${g.id}" title="Copy the picked file names, without .jpg">Copy picks</button>` : "";
     const cells = isVideo
       ? items.map((it) => `
           <div class="ga-vrow" data-path="${esc(it.storage_path)}">
@@ -328,23 +335,40 @@ function galleriesCard(p) {
           </div>`).join("")
       : items.map((it) => `
           <figure class="ga-cell ${it.selected ? "sel" : ""}" data-path="${esc(it.storage_path)}">
-            <img alt="${esc(it.filename || "")}" data-ph>
+            <img alt="${esc(it.filename || "")}" data-ph loading="lazy">
             ${it.selected ? `<span class="ga-tick">&#10003;</span>` : ""}
             <button class="ga-itemdel" data-itemdel="${it.id}" title="Remove">&#10005;</button>
           </figure>`).join("");
-    return `
-      <div class="ga">
-        <div class="ga-head">
-          <div><span class="hud">${GAL_KIND[g.kind] || g.kind}</span><b>${esc(g.title)}</b></div>
-          <div class="ga-meta">${meta}${copyBtn}${lockBtn}<button class="ga-del" data-galdel="${g.id}" title="Delete gallery">&#10005;</button></div>
-        </div>
+    const grid = `
         <div class="${isVideo ? "ga-vlist" : "ga-grid"}">
           ${cells}
           <label class="ga-add">
             <input type="file" multiple accept="${isVideo ? "video/*" : "image/*"}" data-upload="${g.id}" hidden>
             <span>&#43; Upload</span>
           </label>
+        </div>`;
+    const body = sel ? `
+        <div class="ga-picks">
+          <div class="ga-picks-head"><span class="hud">Client picks</span><b>${sel}</b></div>
+          <ol class="ga-names">${picks.map((it) => `<li>${esc(pickName(it))}</li>`).join("")}</ol>
+          <div class="ga-pgrid">${picks.map((it) => `
+            <figure class="ga-pick" data-path="${esc(it.storage_path)}" title="Open full size">
+              <img alt="${esc(pickName(it))}" data-ph>
+              <figcaption>${esc(pickName(it))}</figcaption>
+            </figure>`).join("")}
+          </div>
         </div>
+        <details class="ga-all" data-galall="${g.id}" ${galShowAll.has(g.id) ? "open" : ""}>
+          <summary>All ${items.length} proofs</summary>
+          ${grid}
+        </details>` : grid;
+    return `
+      <div class="ga">
+        <div class="ga-head">
+          <div><span class="hud">${GAL_KIND[g.kind] || g.kind}</span><b>${esc(g.title)}</b></div>
+          <div class="ga-meta">${meta}${copyBtn}${lockBtn}<button class="ga-del" data-galdel="${g.id}" title="Delete gallery">&#10005;</button></div>
+        </div>
+        ${body}
         <div class="ga-prog" data-prog="${g.id}" hidden></div>
       </div>`;
   }).join("") : `<p style="color:var(--faint);font-size:0.85rem;margin:0 0 1rem;">No galleries yet. Create one below — proofing lets the client pick shots; finals and video are for delivery.</p>`;
@@ -566,11 +590,24 @@ function wireDetail(p) {
   $("#dpane").querySelectorAll("[data-copypicks]").forEach((b) => b.addEventListener("click", async () => {
     const gal = (p.bk_galleries || []).find((g) => g.id === b.dataset.copypicks);
     const names = (gal?.bk_gallery_items || []).filter((i) => i.selected)
-      .sort((a, z) => a.sort - z.sort).map((i) => i.filename || i.storage_path.split("/").pop());
+      .sort((a, z) => a.sort - z.sort).map(pickName);
     try {
       await navigator.clipboard.writeText(names.join("\n"));
       toast(`Copied ${names.length} file name${names.length === 1 ? "" : "s"}`);
     } catch (_) { toast("Couldn't copy. Check clipboard permission."); }
+  }));
+
+  $("#dpane").querySelectorAll("[data-galall]").forEach((d) => d.addEventListener("toggle", () => {
+    if (d.open) galShowAll.add(d.dataset.galall); else galShowAll.delete(d.dataset.galall);
+  }));
+
+  // A pick opens full size in a new tab. Open the tab first, inside the click, so it isn't popup-blocked.
+  $("#dpane").querySelectorAll(".ga-pick").forEach((fig) => fig.addEventListener("click", async () => {
+    const tab = window.open("", "_blank");
+    const { data } = await sb.storage.from("project-media").createSignedUrl(fig.dataset.path, 3600);
+    if (!tab) return;
+    if (data?.signedUrl) { tab.opener = null; tab.location.href = data.signedUrl; }
+    else { tab.close(); toast("Couldn't open that photo"); }
   }));
 
   $("#dpane").querySelectorAll("[data-lock]").forEach((b) => b.addEventListener("click", async () => {
