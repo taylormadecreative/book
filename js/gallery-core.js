@@ -11,6 +11,8 @@
     (s ?? "").toString().replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const KIND_LABEL = { proof: "Proofing", final: "Edited photos", video: "Video" };
   const RESIGN_AFTER_MS = 90 * 60 * 1000; // signed URLs live 2h; refresh well before that
+  // the zip helper for "Download all" loads on demand from js/vendor/, next to this file
+  const CORE_SRC = (document.currentScript && document.currentScript.src) || new URL("js/gallery-core.js", location.href).href;
 
   function call(access, payload) {
     const headers = { "Content-Type": "application/json", apikey: window.BK.SUPABASE_KEY };
@@ -259,7 +261,7 @@
     head.className = "g-block-head";
     head.innerHTML = `
       <div>
-        <div class="hud"><span class="tick">●</span> ${esc(KIND_LABEL[g.kind] || g.kind)}</div>
+        <div class="hud"><span class="tick">●</span> ${esc(g.picksOnly ? "Your picks" : KIND_LABEL[g.kind] || g.kind)}</div>
         <h3>${esc(g.title)}</h3>
         ${intro}
       </div>`;
@@ -294,8 +296,20 @@
       return wrap;
     }
 
-    // proof: All / Picked filter
-    if (g.kind === "proof") {
+    // finals: one button for the whole set
+    if (g.kind === "final" && g.items.length > 1) {
+      const mb = Math.round(g.items.reduce((s, it) => s + (it.size_bytes || 0), 0) / 1048576);
+      const row = document.createElement("div");
+      row.className = "g-dlall-row";
+      row.innerHTML = `
+        <button class="btn btn-gold g-dlall">Download all ${g.items.length} photos</button>
+        <span class="g-dlall-note">One zip file${mb ? ` · ${mb} MB` : ""}</span>`;
+      row.querySelector(".g-dlall").addEventListener("click", (e) => downloadAll(ctx, e.currentTarget));
+      wrap.appendChild(row);
+    }
+
+    // proof: All / Picked filter (only while picking; sent picks already show just the picks)
+    if (g.kind === "proof" && !g.locked) {
       const tools = document.createElement("div");
       tools.className = "g-tools";
       tools.setAttribute("role", "group");
@@ -313,10 +327,10 @@
 
     // proof + final share a grid
     const grid = document.createElement("div");
-    grid.className = "g-grid";
+    grid.className = "g-grid" + (g.kind === "final" ? " g-grid-final" : "");
     g.items.forEach((it, idx) => {
       const cell = document.createElement("figure");
-      cell.className = "g-cell" + (it.selected ? " sel" : "");
+      cell.className = "g-cell" + (g.kind === "final" ? " final" : "") + (it.selected ? " sel" : "");
       cell.dataset.id = it.id;
       const n = idx + 1;
       cell.innerHTML = `
@@ -325,7 +339,7 @@
         </button>` +
         (g.kind === "proof"
           ? (g.locked ? "" : `<button class="g-pick" aria-pressed="${it.selected ? "true" : "false"}" aria-label="Pick photo ${n}"><span>&#10003;</span></button>`)
-          : `<a class="g-cell-dl" href="${esc(it.download_url || it.url)}" aria-label="Download photo ${n}">&#8595;</a>`);
+          : `<a class="g-save" href="${esc(it.download_url || it.url)}" aria-label="Download photo ${n}"><span aria-hidden="true">&#8595;</span> Download</a>`);
       grid.appendChild(cell);
     });
     grid.addEventListener("click", (e) => {
@@ -403,7 +417,8 @@
     if (g.locked) {
       bar.classList.remove("live");
       bar.innerHTML = `<span class="pill green">Picks sent ✓ &nbsp;${n} chosen</span>
-        <span class="g-selnote">Nelson is editing your picks. Final images land in “Edited photos”.</span>`;
+        <span class="g-selnote">${g.delivered ? "Your edited versions are up top in “Edited photos”."
+          : "Nelson is editing your picks. Final images land in “Edited photos”."}</span>`;
       return;
     }
     bar.classList.toggle("live", n > 0);
@@ -423,6 +438,45 @@
         ${n ? `<button class="btn btn-ghost g-showpicks">Review picks</button>` : ""}
         <button class="btn btn-gold g-submit"${n < 1 ? " disabled" : ""}>Send ${n ? n + " " : ""}pick${n === 1 ? "" : "s"} to Nelson</button>
       </span>`;
+  }
+
+  /* ---------------- finals: the whole set as one zip ---------------- */
+  // Built in the browser from the signed links: storage caps a single file at 50MB, so there's
+  // no stored zip. JPEGs don't shrink in a zip, so this is only packaging.
+  async function downloadAll(ctx, btn) {
+    const { g } = ctx;
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Getting ready…";
+    try {
+      if (ctx.stale()) await ctx.resign();
+      const { downloadZip } = await import(new URL("vendor/client-zip.js", CORE_SRC).href);
+      const items = g.items.filter((it) => it.url);
+      let n = 0;
+      async function* files() {
+        for (const it of items) {
+          btn.textContent = `Preparing ${++n} of ${items.length}…`;
+          const r = await fetch(it.url);
+          if (!r.ok) throw new Error("fetch_failed");
+          yield { name: it.filename || `photo-${n}.jpg`, input: r };
+        }
+      }
+      const blob = await downloadZip(files()).blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${(g.title || "Photos").replace(/[\\/:*?"<>|]+/g, "-")}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // keep the file around long enough for a phone's "Download?" prompt to be answered
+      setTimeout(() => URL.revokeObjectURL(a.href), 10 * 60 * 1000);
+      toast("Your zip is downloading.");
+    } catch (_) {
+      toast("Couldn't build the zip. Try again, or use Download under each photo.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
   }
 
   async function submitPicks(ctx) {
@@ -496,6 +550,15 @@
         h.textContent = p.title || p.client_name;
         container.appendChild(h);
       }
+      const gotEdits = p.galleries.some((g) => g.kind !== "proof" && g.items.length);
+      p.galleries.forEach((g) => {
+        // once picks are sent, show just the chosen ones (a proof set can be hundreds of photos)
+        if (g.kind === "proof" && g.locked && g.items.some((i) => i.selected)) {
+          g.items = g.items.filter((i) => i.selected);
+          g.picksOnly = true;
+        }
+        g.delivered = gotEdits;
+      });
       p.galleries.slice().sort((a, b) => rank(a) - rank(b)).forEach((g) => {
         if (g.kind === "proof" && !g.locked && g.items.length) openProof = true;
         if (g.kind !== "proof" && g.items.length) delivered = true;

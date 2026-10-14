@@ -104,25 +104,41 @@
   color: #0a0903;
 }
 
-/* final download chip */
-.g-cell-dl {
-  position: absolute;
-  bottom: 8px; right: 8px;
-  width: 32px; height: 32px;
-  border-radius: 8px;
-  background: rgba(8, 8, 10, 0.62);
-  border: 1px solid var(--line);
-  color: var(--gold);
-  font-size: 1rem;
-  display: grid;
-  place-items: center;
-  opacity: 0;
-  transition: opacity 0.25s var(--ease), background 0.25s var(--ease);
-  backdrop-filter: blur(4px);
+/* finals: one button for the whole set */
+.g-dlall-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; margin: 0 0 1.2rem; }
+.g-dlall-row .btn { padding: 0.75em 1.4em; font-size: 0.92rem; }
+.g-dlall-row .btn:disabled { opacity: 0.8; cursor: progress; }
+.g-dlall-note { color: var(--muted); font-size: 0.85rem; }
+
+/* finals: the photo, then a labeled Download button under it */
+.g-grid-final { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 1.1rem 0.75rem; }
+@media (max-width: 560px) { .g-grid-final { grid-template-columns: repeat(2, 1fr); gap: 1rem 0.5rem; } }
+.g-cell.final { aspect-ratio: auto; overflow: visible; background: none; border: 0; }
+.g-cell.final .g-open {
+  height: auto;
+  aspect-ratio: var(--g-ar, 1 / 1);
+  overflow: hidden;
+  background: var(--bg-3);
+  border: 1px solid var(--line-soft);
 }
-.g-cell:hover .g-cell-dl { opacity: 1; }
-.g-cell-dl:hover { background: var(--gold); color: #0a0903; }
-@media (hover: none) { .g-cell-dl { opacity: 1; } }
+.g-save {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+  margin-top: 0.45rem;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+.g-save span { color: var(--gold); }
+.g-save:hover { background: var(--gold); border-color: var(--gold); color: #0a0903; }
+.g-save:hover span { color: inherit; }
 
 /* selection bar */
 .g-selbar {
