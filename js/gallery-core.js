@@ -2,7 +2,7 @@
  * Used by both the token portal (portal.html) and the logged-in hub (gallery.html).
  * Talks only to the bk-media edge function; no direct DB/storage access.
  *
- *   BKGallery.mount(containerEl, access) → Promise<{ openProof: boolean }>
+ *   BKGallery.mount(containerEl, access) → Promise<{ openProof: boolean, delivered: boolean }>
  *     access = { mode:"token", project_id, token }
  *           | { mode:"session", jwt }        // Supabase access_token
  */
@@ -457,7 +457,7 @@
       data = await call(access, { action: "list" });
     } catch (_) {
       container.innerHTML = `<p class="g-empty">Couldn't load your media right now. Refresh to try again.</p>`;
-      return { openProof: false };
+      return { openProof: false, delivered: false };
     }
     let signedAt = Date.now();
     const projects = data.projects || [];
@@ -481,10 +481,13 @@
     const hasAny = projects.some((p) => (p.galleries || []).length);
     if (!hasAny) {
       container.innerHTML = `<p class="g-empty">Nothing here yet. Once we shoot and Nelson uploads, your proofs, edits, and video show up here.</p>`;
-      return { openProof: false };
+      return { openProof: false, delivered: false };
     }
     const multi = projects.length > 1;
-    let openProof = false;
+    let openProof = false, delivered = false;
+    // what they came for first: proofs waiting on picks, then edits + video, then proofs already sent
+    // (a sent proof set can be hundreds of photos; the edits shouldn't sit under it)
+    const rank = (g) => g.kind === "proof" ? (g.locked ? 3 : 0) : g.kind === "final" ? 1 : 2;
     projects.forEach((p) => {
       if (!(p.galleries || []).length) return;
       if (multi) {
@@ -493,14 +496,13 @@
         h.textContent = p.title || p.client_name;
         container.appendChild(h);
       }
-      ["proof", "final", "video"].forEach((kind) => {
-        p.galleries.filter((g) => g.kind === kind).forEach((g) => {
-          if (kind === "proof" && !g.locked && g.items.length) openProof = true;
-          container.appendChild(galleryBlock(access, p, g, resign, stale));
-        });
+      p.galleries.slice().sort((a, b) => rank(a) - rank(b)).forEach((g) => {
+        if (g.kind === "proof" && !g.locked && g.items.length) openProof = true;
+        if (g.kind !== "proof" && g.items.length) delivered = true;
+        container.appendChild(galleryBlock(access, p, g, resign, stale));
       });
     });
-    return { openProof };
+    return { openProof, delivered };
   }
 
   window.BKGallery = { mount };
