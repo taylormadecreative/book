@@ -7,50 +7,59 @@
   <script>document.documentElement.classList.add("js");</script>
   <title>Studio — Taylormade Booking</title>
   <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0b0b0d">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=Familjen+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Familjen+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/admin.css">
+  <link rel="stylesheet" href="css/admin.css?v=3">
 </head>
 <body>
 
   <!-- login -->
   <div class="login-wrap" id="loginView">
-    <span class="hud"><span class="tick">●</span> STUDIO ACCESS</span>
-    <h1>Taylormade<span style="color:var(--gold);">/</span>Studio</h1>
+    <div class="login-mark">
+      <span class="wordmark">TAYLORMADE<i>/</i>CREATIVE</span>
+      <span class="studio-tag">Studio</span>
+    </div>
     <form id="loginForm">
       <div class="field"><label for="email">Email</label><input type="email" id="email" autocomplete="username" required></div>
       <div class="field"><label for="password">Password</label><input type="password" id="password" autocomplete="current-password" required></div>
-      <button class="btn btn-gold" id="loginBtn" type="submit" style="width:100%;">Sign in</button>
+      <button class="btn btn-gold" id="loginBtn" type="submit">Sign in</button>
       <div class="login-err" id="loginErr"></div>
     </form>
-    <div style="display:flex; align-items:center; gap:12px; margin:1.1rem 0; color:var(--faint); font-size:0.78rem; letter-spacing:0.12em; text-transform:uppercase;" aria-hidden="true">
-      <span style="flex:1; height:1px; background:var(--line);"></span>or<span style="flex:1; height:1px; background:var(--line);"></span>
-    </div>
-    <button class="btn btn-ghost" id="googleBtn" type="button" style="width:100%;">Continue with Google</button>
+    <div class="login-or" aria-hidden="true"><span></span>or<span></span></div>
+    <button class="btn btn-ghost" id="googleBtn" type="button">Continue with Google</button>
   </div>
 
   <!-- app -->
   <div id="appView" hidden>
-    <div class="abar">
-      <a class="nav-logo" href="index.html" style="font-family:var(--font-display);font-weight:700;font-size:0.9rem;color:var(--text);">TAYLORMADE<span style="color:var(--gold);">/</span>STUDIO</a>
+    <header class="abar">
+      <a class="brand" href="index.html">
+        <span class="wordmark">TAYLORMADE<i>/</i>CREATIVE</span>
+        <span class="studio-tag">Studio</span>
+      </a>
       <div class="stats" id="stats"></div>
-      <div style="display:flex;gap:1rem;align-items:center;">
-        <a href="growth.html" style="color:var(--muted);font-size:0.85rem;">Growth →</a>
-        <a href="schedule.html" style="color:var(--muted);font-size:0.85rem;">Schedule →</a>
+      <nav class="abar-nav">
+        <a href="growth.html">Growth <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg></a>
+        <a href="schedule.html">Schedule <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg></a>
+        <span class="avatar" id="avatar" aria-hidden="true"></span>
         <button class="linkish" id="logoutBtn">Sign out</button>
-      </div>
-    </div>
+      </nav>
+    </header>
 
     <div class="amain">
       <aside class="lpane">
         <div class="lpane-head">
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:0.6rem;">
-            <span class="hud">PIPELINE</span>
-            <button class="btn btn-ghost" id="newProjBtn" style="font-size:0.78rem;padding:0.45em 1em;">+ New project</button>
+          <div class="lpane-title">
+            <h2>Pipeline</h2>
+            <button class="btn btn-gold" id="newProjBtn">+ New project</button>
           </div>
-          <div class="filters" id="filters"></div>
+          <label class="psearch">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M13 13l4 4"/></svg>
+            <input type="search" id="pSearch" placeholder="Search projects…" aria-label="Search projects" autocomplete="off" spellcheck="false">
+          </label>
+          <div class="filters" id="filters" role="group" aria-label="Filter by status"></div>
         </div>
         <div class="newproj" id="newProj" hidden>
           <div class="bgrid">
@@ -68,23 +77,23 @@
             <input id="npLocation" maxlength="240" placeholder="Location">
           </div>
           <div class="actions">
-            <button class="btn btn-gold" id="npCreate" style="font-size:0.82rem;">Create</button>
-            <button class="btn btn-ghost" id="npCancel" style="font-size:0.82rem;">Cancel</button>
+            <button class="btn btn-gold" id="npCreate">Create</button>
+            <button class="btn btn-ghost" id="npCancel">Cancel</button>
           </div>
         </div>
-        <div class="plist" id="plist"></div>
+        <div class="plist" id="plist" aria-busy="true"><div class="sk-row" aria-hidden="true"><span><i></i><i></i></span><b></b></div><div class="sk-row" aria-hidden="true"><span><i></i><i></i></span><b></b></div><div class="sk-row" aria-hidden="true"><span><i></i><i></i></span><b></b></div><div class="sk-row" aria-hidden="true"><span><i></i><i></i></span><b></b></div><div class="sk-row" aria-hidden="true"><span><i></i><i></i></span><b></b></div></div>
       </aside>
 
       <main class="dpane" id="dpane">
-        <div class="dempty">SELECT A PROJECT</div>
+        <div class="dempty">Pick a project from the pipeline</div>
       </main>
     </div>
   </div>
 
-  <div class="toast" id="toast"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="js/config.js"></script>
-  <script src="js/admin.js"></script>
+  <script src="js/admin.js?v=3"></script>
 </body>
 </html>

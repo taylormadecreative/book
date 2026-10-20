@@ -28,3 +28,10 @@ Brand register (index). Aesthetic: **"Viewfinder" cinematic HUD futurism**. A ca
 
 ## Banned (plus impeccable's bans)
 Public pricing except the $100 digitals flat rate. Supplier names. Street addresses. Fake scarcity or invented stats. Purple gradients, glassmorphism, hero-metric template, identical card grids, side-stripe borders, gradient text, em dashes in copy.
+
+## Studio dashboard (admin.html), redesigned 2026-10-20 from Nelson's approved mockup
+Product register; his mockup overrides the bans above (the gold left bar on the selected pipeline row and the big gold stat numerals are approved).
+- **Layout:** ink chrome (top bar + pipeline sidebar, #0b0b0d) around a warm paper work surface (#f5f2eb, cards #fbf9f5, rounded top-left corner). Desktop is an app shell: the pipeline and the project scroll separately. One column below ~1320px puts Messages right under the brief, and the cards renumber to match.
+- **Type:** Anton (headings, stat numbers, amounts), IBM Plex Sans Condensed (UI: rows, buttons, nav), Familjen Grotesk (reading text), IBM Plex Mono (small uppercase labels, 11px minimum). **Never Martian Mono**: Nelson dislikes it.
+- **Components:** numbered gold-circle section headers (01-07); outlined status chips (NEW neutral, BOOKED/PRODUCTION gold, DELIVERED green); client chat bubbles light, his own replies ink; gold = primary action, ink outline = secondary, solid ink = add.
+- **Files:** `css/admin.css` is admin.html only. `schedule.html` and `growth.html` use `css/staff.css`, the frozen pre-redesign look.

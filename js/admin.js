@@ -7,12 +7,28 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => (s ?? "").toString().replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const money = (c) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 const fmtD = (d) => d ? new Date(d.length === 10 ? d + "T12:00:00" : d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+const fmtLong = (d) => d ? new Date(d.length === 10 ? d + "T12:00:00" : d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "";
+const fmtTime = (d) => new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+const dollars = (c) => `$${Math.round(c / 100).toLocaleString("en-US")}`;
+// "$12.4K" / "$124K" / "$1.2M" for the phone stat strip, where the exact total doesn't fit
+const dollarsShort = (c) => {
+  const d = c / 100;
+  if (d < 10000) return dollars(c);
+  if (d < 1e6) return `$${(d / 1000).toFixed(d < 1e5 ? 1 : 0).replace(/\.0$/, "")}K`;
+  return `$${(d / 1e6).toFixed(1).replace(/\.0$/, "")}M`;
+};
+const cap = (w) => (w ? w[0].toUpperCase() + w.slice(1) : "");
+const coarse = () => window.matchMedia("(pointer: coarse)").matches;
+// "Dr. Melva K. Wallace" → "Melva": what the chat labels and reply box call the client
+const firstName = (n) => ((n || "").replace(/^(dr|mr|mrs|ms|mx|miss)\.?\s+/i, "").trim().split(/\s+/)[0]) || "client";
+const ICON_LINK = `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 11.5a3.5 3.5 0 0 0 5 0l2.5-2.5a3.5 3.5 0 0 0-5-5l-1 1"/><path d="M11.5 8.5a3.5 3.5 0 0 0-5 0L4 11a3.5 3.5 0 0 0 5 5l1-1"/></svg>`;
+const ICON_ARROW = `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12M11 5l5 5-5 5"/></svg>`;
 
 const SERVICES = { music_video: "Music video", brand_content: "Brand content", photography: "Photography", event: "Event", digitals: "Digitals", other: "Other" };
 const STATUSES = ["new", "quoted", "booked", "in_production", "delivered", "archived", "lost"];
 const SLABEL = { new: "New", quoted: "Quoted", booked: "Booked", in_production: "Production", delivered: "Delivered", archived: "Archived", lost: "Lost" };
 
-const state = { projects: [], filter: "active", sel: null, poll: null };
+const state = { projects: [], filter: "active", q: "", sel: null, poll: null };
 
 function toast(msg) {
   const t = $("#toast");
@@ -53,21 +69,39 @@ async function boot() {
   // verify admin (RLS will return nothing for non-admins anyway)
   $("#loginView").hidden = true;
   $("#appView").hidden = false;
+  const { data } = await sb.auth.getSession();
+  const u = data.session?.user;
+  if (u) {
+    const name = u.user_metadata?.full_name || u.user_metadata?.name || "";
+    const ini = name ? name.split(/\s+/).filter(Boolean).map((w) => w[0]).join("").slice(0, 2) : (u.email || "?")[0];
+    $("#avatar").textContent = ini.toUpperCase();
+    $("#avatar").title = u.email || "";
+  }
   renderFilters();
   await load();
   state.poll = setInterval(() => { if (!document.hidden) load(); }, 15000);
 }
 
 /* ---------------- data ---------------- */
-async function load() {
+// afterSend: Nelson just sent a reply, so redraw even though his cursor is still in the reply box
+async function load(afterSend = false) {
   const { data, error } = await sb
     .from("bk_projects")
     .select("*, bk_invoices(*), bk_messages(*), bk_files(*), bk_galleries(*, bk_gallery_items(*))")
     .order("updated_at", { ascending: false });
-  if (error) { toast("Load failed — are you signed in as admin?"); return; }
+  if (error) {
+    toast("Load failed. Are you signed in as admin?");
+    if (!state.projects.length) {
+      $("#plist").removeAttribute("aria-busy");
+      $("#plist").innerHTML = `<div class="plist-empty">Couldn't load the pipeline. Trying again every 15 seconds.</div>`;
+    }
+    return;
+  }
   state.projects = data || [];
+  const rowFocus = document.activeElement?.closest?.(".prow")?.dataset.id;
   renderStats();
   renderList();
+  if (rowFocus) $(`.prow[data-id="${rowFocus}"]`)?.focus({ preventScroll: true });
   if (state.sel) {
     const p = state.projects.find((x) => x.id === state.sel);
     // never re-render the detail pane while Nelson is typing or uploading —
@@ -77,12 +111,13 @@ async function load() {
     // …nor while a contract draft is open in the editor — unsaved contract copy
     // must survive the poll even if focus wanders outside the textarea
     const editingContract = !!document.getElementById("ctEditor");
-    if (p && !typing && !state.uploading && !editingContract) renderDetail(p, true);
+    if (p && (afterSend || !typing) && !state.uploading && !editingContract) renderDetail(p, true);
   }
+  state.chatToEnd = false;
 }
 
 /* preserve form values + focus across detail re-renders */
-const FORM_IDS = ["noteBox", "achatInput", "invTitle", "invAmt", "invKind", "fileLabel", "fileUrl"];
+const FORM_IDS = ["noteBox", "achatInput", "invTitle", "invAmt", "invKind", "fileLabel", "fileUrl", "galTitle", "galLimit", "galKind"];
 function captureForms() {
   const ae = document.activeElement;
   const saved = {};
@@ -124,11 +159,12 @@ function renderStats() {
   const unread = ps.reduce((n, p) => n + unreadCount(p), 0);
   const collected = ps.flatMap((p) => p.bk_invoices).filter((i) => i.status === "paid").reduce((n, i) => n + i.amount_cents, 0);
   const booked = ps.filter((p) => ["booked", "in_production"].includes(p.status)).length;
-  $("#stats").innerHTML = `
-    <span class="pill ${newCount ? "gold" : ""}">${newCount} new</span>
-    <span class="pill ${unread ? "gold" : ""}">${unread} unread</span>
-    <span class="pill">${booked} active</span>
-    <span class="pill green">${money(collected)} collected</span>`;
+  const stat = (n, one, many, show = n) => `<div class="stat ${n ? "" : "zero"}"><b>${show}</b><span>${n === 1 ? one : many}</span></div>`;
+  $("#stats").innerHTML =
+    stat(newCount, "New inquiry", "New inquiries") +
+    stat(unread, "Unread message", "Unread messages") +
+    stat(booked, "Active project", "Active projects") +
+    stat(collected, "Collected", "Collected", `<span class="full">${dollars(collected)}</span><span class="short" title="${dollars(collected)}">${dollarsShort(collected)}</span>`);
 }
 
 /* ---------------- list + filters ---------------- */
@@ -136,6 +172,20 @@ const FILTERS = [["active", "Active"], ["new", "New"], ["quoted", "Quoted"], ["b
 function renderFilters() {
   $("#filters").innerHTML = FILTERS.map(([v, l]) => `<button data-f="${v}" class="${state.filter === v ? "on" : ""}">${l}</button>`).join("");
 }
+$("#pSearch").addEventListener("input", (e) => {
+  state.q = e.target.value;
+  renderList();
+});
+$("#pSearch").addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && e.target.value) { e.preventDefault(); e.target.value = ""; state.q = ""; renderList(); }
+});
+// "/" jumps to search from anywhere that isn't a text field
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey || $("#appView").hidden) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
+  e.preventDefault();
+  $("#pSearch").focus();
+});
 $("#filters").addEventListener("click", (e) => {
   const b = e.target.closest("[data-f]");
   if (!b) return;
@@ -145,31 +195,50 @@ $("#filters").addEventListener("click", (e) => {
 });
 
 function visibleProjects() {
-  if (state.filter === "all") return state.projects;
-  if (state.filter === "active") return state.projects.filter((p) => !["archived", "lost"].includes(p.status));
-  return state.projects.filter((p) => p.status === state.filter);
+  let ps = state.projects;
+  if (state.filter === "active") ps = ps.filter((p) => !["archived", "lost"].includes(p.status));
+  else if (state.filter !== "all") ps = ps.filter((p) => p.status === state.filter);
+  const q = state.q.trim().toLowerCase();
+  if (!q) return ps;
+  // every word has to match somewhere: "wallace photo" finds Dr. Wallace's photography project
+  const words = q.split(/\s+/);
+  return ps.filter((p) => {
+    const hay = [p.client_name, p.company, p.client_email, p.client_phone, p.title, p.location, SERVICES[p.service]]
+      .filter(Boolean).join(" ").toLowerCase();
+    return words.every((w) => hay.includes(w));
+  });
 }
+
+const ST_CLASS = { new: "st-new", quoted: "st-quoted", booked: "st-gold", in_production: "st-gold", delivered: "st-green", archived: "st-dim", lost: "st-dim" };
 
 function renderList() {
   const ps = visibleProjects();
-  $("#plist").innerHTML = ps.length ? ps.map((p) => `
-    <button class="prow ${state.sel === p.id ? "sel" : ""}" data-id="${p.id}">
-      <span><b>${esc(p.client_name)}${p.company ? ` · ${esc(p.company)}` : ""}</b>
-      <small>${SERVICES[p.service] || p.service} · ${fmtD(p.event_date)}</small></span>
+  const q = state.q.trim();
+  $("#plist").removeAttribute("aria-busy");
+  $("#plist").innerHTML = ps.length ? ps.map((p) => {
+    const n = unreadCount(p);
+    return `
+    <button class="prow ${state.sel === p.id ? "sel" : ""}" data-id="${p.id}" ${state.sel === p.id ? `aria-current="true"` : ""}>
+      <span><b>${esc(p.client_name)}${!p.company ? "" : (p.client_name + p.company).length > 24 ? `<span class="co">${esc(p.company)}</span>` : ` · ${esc(p.company)}`}</b>
+      <small>${esc(SERVICES[p.service] || p.service)} · ${fmtD(p.event_date)}</small></span>
       <span class="meta">
-        ${unreadCount(p) ? `<span class="unread">${unreadCount(p)}</span><br>` : ""}
-        <span class="pill ${["booked", "in_production"].includes(p.status) ? "gold" : p.status === "delivered" ? "green" : ""}">${SLABEL[p.status]}</span>
+        ${n ? `<span class="unread" aria-label="${n} unread">${n}</span>` : ""}
+        <span class="st ${ST_CLASS[p.status] || ""}">${SLABEL[p.status] || esc(p.status)}</span>
       </span>
-    </button>`).join("")
-    : `<div class="dempty" style="margin-top:3rem;">NOTHING HERE YET</div>`;
+    </button>`;
+  }).join("")
+    : q ? `<div class="plist-empty">No projects match “${esc(q)}”.<button type="button" data-clearq>Clear search</button></div>`
+    : `<div class="plist-empty">Nothing in this view yet.</div>`;
 }
 $("#plist").addEventListener("click", (e) => {
+  if (e.target.closest("[data-clearq]")) { $("#pSearch").value = ""; state.q = ""; renderList(); $("#pSearch").focus(); return; }
   const r = e.target.closest(".prow");
   if (!r) return;
   state.sel = r.dataset.id;
   renderList();
   const p = state.projects.find((x) => x.id === state.sel);
   renderDetail(p);
+  $("#dpane h1")?.focus({ preventScroll: true });
   markRead(p);
   // stacked mobile layout: the detail pane renders below the fold — go to it
   if (window.matchMedia("(max-width: 960px)").matches) {
@@ -193,28 +262,45 @@ function portalUrl(p) {
 function renderDetail(p, keepScroll = false) {
   const pane = $("#dpane");
   const formCap = keepScroll ? captureForms() : null;
+  const h1Focus = document.activeElement?.matches?.("#dpane h1");
   const chatBox = keepScroll ? $("#achatScroll")?.scrollTop : null;
   const inv = p.bk_invoices.sort((a, b) => a.created_at.localeCompare(b.created_at));
   const msgs = p.bk_messages.sort((a, b) => a.created_at.localeCompare(b.created_at));
   const files = p.bk_files.sort((a, b) => a.created_at.localeCompare(b.created_at));
 
+  const paid = inv.filter((i) => i.status === "paid").reduce((n, i) => n + i.amount_cents, 0);
+  const heading = `${p.client_name}${p.company ? ` — ${p.company}` : ""}`;
+  const who = firstName(p.client_name);
+  // a divider each time the conversation moves to a new day
+  let lastDay = "";
+  const thread = msgs.map((m) => {
+    const day = new Date(m.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const sep = day !== lastDay ? `<div class="chat-day">${day}</div>` : "";
+    lastDay = day;
+    return `${sep}
+                <div class="msg ${m.sender}"><span class="msg-body">${esc(m.body).trim().split(/\n[ \t]*\n+/).map((para) => `<span class="msg-p">${para}</span>`).join("")}</span>
+                <time datetime="${esc(m.created_at)}">${m.sender === "studio" ? "You" : esc(who)} · ${fmtTime(m.created_at)}</time></div>`;
+  }).join("");
+  const head = (n, title, aside = "") => `<div class="acard-head"><span class="num">${n}</span><h3>${title}</h3>${aside}</div>`;
+
   pane.innerHTML = `
     <div class="dhead">
       <div>
-        <span class="hud">FILE ${p.id.slice(0, 8).toUpperCase()} <span class="tick">/</span> ${esc(SERVICES[p.service] || p.service).toUpperCase()}</span>
-        <h2>${esc(p.client_name)}${p.company ? ` — ${esc(p.company)}` : ""}</h2>
+        <div class="crumb">Project<span>/</span>${p.id.slice(0, 8).toUpperCase()}</div>
+        <h1 class="${heading.length > 26 ? "long" : ""}" tabindex="-1">${esc(heading)}</h1>
+        <div class="sub">${esc(SERVICES[p.service] || p.service)}${p.event_date ? `<span>·</span>${fmtLong(p.event_date)}` : ""}</div>
       </div>
       <div class="dactions">
         <button class="btn btn-ghost back-list" id="backList">← Pipeline</button>
-        <select id="statusSel">${STATUSES.map((s) => `<option value="${s}" ${p.status === s ? "selected" : ""}>${SLABEL[s]}</option>`).join("")}</select>
-        <button class="btn btn-ghost" id="copyPortal">Copy portal link</button>
+        <select id="statusSel" aria-label="Project status">${STATUSES.map((s) => `<option value="${s}" ${p.status === s ? "selected" : ""}>${SLABEL[s]}</option>`).join("")}</select>
+        <button class="btn btn-ghost" id="copyPortal">${ICON_LINK}Copy portal link</button>
       </div>
     </div>
 
     <div class="dgrid">
-      <div>
-        <div class="acard">
-          <h3>CLIENT <b>BRIEF</b></h3>
+      <div class="dcol">
+        <section data-k="brief" class="acard">
+          ${head("01", "Client brief")}
           <div class="kv2">
             <div><span>Email</span><a href="mailto:${esc(p.client_email)}">${esc(p.client_email)}</a></div>
             <div><span>Phone</span>${p.client_phone ? `<a href="tel:${esc(p.client_phone)}">${esc(p.client_phone)}</a>` : "—"}</div>
@@ -224,83 +310,110 @@ function renderDetail(p, keepScroll = false) {
             <div><span>Source</span>${esc(p.referral_source || "—")}</div>
             ${p.details ? `<div class="wide"><span>The vision</span>${esc(p.details)}</div>` : ""}
           </div>
-        </div>
+        </section>
 
-        <div class="acard">
-          <h3>INVOICES <b>· ${money(inv.filter((i) => i.status === "paid").reduce((n, i) => n + i.amount_cents, 0))} PAID</b></h3>
+        <section data-k="invoices" class="acard">
+          ${head("02", "Invoices", `<span class="aside">${money(paid)} paid</span>`)}
           ${inv.length ? inv.map((i) => `
             <div class="ainv">
-              <div><div class="t">${esc(i.title)} <span class="pill ${i.status === "paid" ? "green" : i.status === "sent" ? "gold" : i.status === "void" ? "red" : ""}" style="margin-left:0.4em;">${i.status}</span></div>
-              <small style="color:var(--faint);">${i.kind}${i.paid_at ? ` · paid ${fmtD(i.paid_at)}` : ""}</small></div>
+              <div><div class="t">${esc(i.title)}<span class="pill ${i.status === "paid" ? "green" : i.status === "sent" ? "gold" : i.status === "void" ? "red" : ""}">${i.status}</span></div>
+              <small>${esc(cap(i.kind))}${i.paid_at ? ` · paid ${fmtD(i.paid_at)}` : ""}</small></div>
               <span class="a">${money(i.amount_cents)}</span>
               <div class="acts">
                 ${i.status === "draft" ? `<button data-inv-send="${i.id}">Send</button>` : ""}
                 ${i.status === "sent" ? `<button data-inv-paid="${i.id}">Mark paid</button>` : ""}
                 ${i.status !== "void" && i.status !== "paid" ? `<button data-inv-void="${i.id}">Void</button>` : ""}
               </div>
-            </div>`).join("") : `<p style="color:var(--faint);font-size:0.85rem;margin:0;">No invoices yet.</p>`}
+            </div>`).join("") : `<p class="acard-empty">No invoices yet.</p>`}
           <div class="inv-new">
-            <input id="invTitle" placeholder="Title (e.g. Booking deposit)">
-            <input id="invAmt" type="number" min="1" step="0.01" placeholder="$">
-            <select id="invKind"><option value="deposit">Deposit</option><option value="balance">Balance</option><option value="full">Full</option><option value="custom">Custom</option></select>
-            <button class="btn btn-gold" id="invCreate">Add + send</button>
+            <input id="invTitle" placeholder="Invoice title" aria-label="Invoice title">
+            <label class="money-in"><span>$</span><input id="invAmt" type="number" min="1" step="0.01" placeholder="0.00" aria-label="Amount in dollars"></label>
+            <select id="invKind" aria-label="Invoice type"><option value="deposit">Deposit</option><option value="balance">Balance</option><option value="full">Full</option><option value="custom">Custom</option></select>
+            <button class="btn btn-gold" id="invCreate">Add &amp; send</button>
           </div>
-        </div>
+        </section>
 
-        <div class="acard">
-          <h3>CONTRACTS <b>· E-SIGN</b></h3>
-          <div id="ctBox"><span class="hud" style="color:var(--faint);">LOADING…</span></div>
-        </div>
+        <section data-k="contracts" class="acard">
+          ${head("03", "Contracts")}
+          <div id="ctBox"><span class="hud">Loading…</span></div>
+        </section>
 
-        <div class="acard notes">
-          <h3>INTERNAL <b>NOTES</b></h3>
-          <textarea id="noteBox" placeholder="Only you see this…">${esc(p.notes_internal || "")}</textarea>
-          <button class="btn btn-ghost" id="noteSave" style="margin-top:0.6rem;font-size:0.8rem;padding:0.5em 1.2em;">Save notes</button>
-        </div>
+        <section data-k="notes" class="acard notes">
+          ${head("04", "Internal notes")}
+          <textarea id="noteBox" placeholder="Only you can see this…" aria-label="Internal notes">${esc(p.notes_internal || "")}</textarea>
+          <button class="btn btn-ghost btn-sm" id="noteSave">Save notes</button>
+        </section>
       </div>
 
-      <div>
-        <div class="acard">
-          <h3>MESSAGES <b>· CLIENT LINE</b></h3>
+      <div class="dcol">
+        <section data-k="messages" class="acard">
+          ${head("05", "Messages <small>· Client line</small>")}
           <div class="achat">
             <div class="chat-scroll" id="achatScroll">
-              ${msgs.length ? msgs.map((m) => `
-                <div class="msg ${m.sender}"><span class="msg-body">${esc(m.body)}</span>
-                <time>${m.sender === "studio" ? "You" : esc(p.client_name)} · ${new Date(m.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</time></div>`).join("")
-                : `<div style="color:var(--faint);font-size:0.85rem;margin:auto;">No messages yet.</div>`}
+              ${msgs.length ? thread : `<div class="chat-none">No messages yet.</div>`}
             </div>
             <form id="achatForm">
-              <textarea id="achatInput" placeholder="Reply to ${esc(p.client_name)}…" maxlength="4000"></textarea>
-              <button class="btn btn-gold" type="submit" style="align-self:flex-end;">Send</button>
+              <textarea id="achatInput" rows="1" placeholder="Reply to ${esc(who)}…" maxlength="4000" aria-label="Reply to ${esc(p.client_name)}"></textarea>
+              <button class="btn btn-gold" type="submit">Send ${ICON_ARROW}</button>
             </form>
           </div>
-        </div>
+        </section>
 
-        <div class="acard">
-          <h3>FILES <b>&amp; DELIVERY</b></h3>
-          ${files.map((f) => `
+        <section data-k="files" class="acard">
+          ${head("06", "Files &amp; delivery")}
+          ${files.length ? files.map((f) => `
             <div class="file-row">
               <a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.label)}</a>
-              <button data-file-del="${f.id}">remove</button>
-            </div>`).join("")}
+              <button data-file-del="${f.id}">Remove</button>
+            </div>`).join("") : `<p class="acard-empty">Share project files and delivery links.</p>`}
           <div class="file-add">
-            <input id="fileLabel" placeholder="Label">
-            <input id="fileUrl" placeholder="https:// link (Drive, Dropbox, frame.io…)">
-            <button class="btn btn-ghost" id="fileAdd" style="font-size:0.8rem;padding:0.5em 1em;">Add</button>
+            <input id="fileLabel" placeholder="Label" aria-label="Link label">
+            <input id="fileUrl" placeholder="Paste a delivery link…" aria-label="Delivery link (Drive, Dropbox, frame.io)">
+            <button class="btn btn-ink" id="fileAdd">Add</button>
           </div>
-        </div>
+        </section>
       </div>
     </div>
     ${galleriesCard(p)}`;
 
-  if (keepScroll && chatBox != null && $("#achatScroll")) $("#achatScroll").scrollTop = chatBox;
+  // the project pane scrolls on its own now: a different project starts at its top
+  if (!keepScroll) { pane.scrollTop = 0; if (window.matchMedia("(min-width: 961px)").matches) window.scrollTo(0, 0); }
+  if (keepScroll && chatBox != null && $("#achatScroll") && !state.chatToEnd) $("#achatScroll").scrollTop = chatBox;
   else if ($("#achatScroll")) $("#achatScroll").scrollTop = $("#achatScroll").scrollHeight;
+  state.chatToEnd = false;
 
   restoreForms(formCap);
+  if (h1Focus) $("#dpane h1").focus({ preventScroll: true });
+  numberCards();
+  autosize($("#achatInput"));
   wireDetail(p);
   hydrateThumbs();
   if (ctState.projectId === p.id) renderContracts(p); // instant paint from cache
   loadContracts(p); // then refresh from the DB
+}
+
+// Cards are numbered in reading order: the reference layout in two columns (01-04 left, 05-06 right),
+// and brief, messages, invoices… when the pane is one column (see the container query in admin.css).
+const ONE_COL_ORDER = ["brief", "messages", "invoices", "contracts", "notes", "files"];
+const TWO_COL_ORDER = ["brief", "invoices", "contracts", "notes", "messages", "files"];
+function numberCards() {
+  const pane = $("#dpane");
+  if (!pane.querySelector("[data-k]")) return;
+  const cs = getComputedStyle(pane);
+  const inner = pane.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const order = inner <= 900 ? ONE_COL_ORDER : TWO_COL_ORDER;
+  order.forEach((k, i) => {
+    const num = pane.querySelector(`[data-k="${k}"] .num`);
+    if (num) num.textContent = String(i + 1).padStart(2, "0");
+  });
+}
+new ResizeObserver(() => numberCards()).observe($("#dpane"));
+
+// the reply box grows with what Nelson types, up to its max-height
+function autosize(el) {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${Math.min(el.scrollHeight + 2, 180)}px`;
 }
 
 /* ---------------- galleries (photos & video) ---------------- */
@@ -343,7 +456,7 @@ function galleriesCard(p) {
         <div class="${isVideo ? "ga-vlist" : "ga-grid"}">
           ${cells}
           <label class="ga-add">
-            <input type="file" multiple accept="${isVideo ? "video/*" : "image/*"}" data-upload="${g.id}" hidden>
+            <input type="file" class="vh" multiple accept="${isVideo ? "video/*" : "image/*"}" data-upload="${g.id}">
             <span>&#43; Upload</span>
           </label>
         </div>`;
@@ -371,23 +484,23 @@ function galleriesCard(p) {
         ${body}
         <div class="ga-prog" data-prog="${g.id}" hidden></div>
       </div>`;
-  }).join("") : `<p style="color:var(--faint);font-size:0.85rem;margin:0 0 1rem;">No galleries yet. Create one below — proofing lets the client pick shots; finals and video are for delivery.</p>`;
+  }).join("") : `<p class="acard-empty">No galleries yet. Proofing lets the client pick shots; edited photos and video are for delivery.</p>`;
 
   return `
-    <div class="acard ga-card">
-      <h3>GALLERIES <b>· PHOTOS &amp; VIDEO</b></h3>
+    <section class="acard ga-card">
+      <div class="acard-head"><span class="num">07</span><h3>Galleries <small>· Photos &amp; video</small></h3></div>
       ${blocks}
       <div class="ga-new">
-        <select id="galKind">
+        <select id="galKind" aria-label="Gallery type">
           <option value="proof">Proofing (client picks)</option>
           <option value="final">Edited photos</option>
           <option value="video">Video</option>
         </select>
-        <input id="galTitle" placeholder="Gallery title">
-        <input id="galLimit" type="number" min="1" placeholder="Pick limit (optional)">
-        <button class="btn btn-gold" id="galCreate" style="font-size:0.82rem;">New gallery</button>
+        <input id="galTitle" placeholder="Gallery title" aria-label="Gallery title">
+        <input id="galLimit" type="number" min="1" placeholder="Pick limit (optional)" aria-label="Pick limit">
+        <button class="btn btn-gold" id="galCreate">New gallery</button>
       </div>
-    </div>`;
+    </section>`;
 }
 
 // Grid thumbnails sit next to the original under thumbs/ (same name); older uploads have none.
@@ -448,7 +561,7 @@ const MAX_UPLOAD_BYTES = 600 * 1024 * 1024; // 600MB per file
 async function uploadToGallery(p, galleryId, files) {
   const tooBig = files.filter((f) => f.size > MAX_UPLOAD_BYTES);
   if (tooBig.length) {
-    toast(`${tooBig.length} file${tooBig.length === 1 ? " is" : "s are"} over 600MB — skipped. Compress and retry.`);
+    toast(`${tooBig.length} file${tooBig.length === 1 ? " is" : "s are"} over 600MB, skipped. Compress and retry.`);
     files = files.filter((f) => f.size <= MAX_UPLOAD_BYTES);
   }
   if (!files.length) return;
@@ -481,7 +594,7 @@ async function uploadToGallery(p, galleryId, files) {
   }
   state.uploading = false;
   if (prog) prog.hidden = true;
-  toast(failed ? `${total - failed} uploaded, ${failed} failed` : `${total} uploaded — live for the client`);
+  toast(failed ? `${total - failed} uploaded, ${failed} failed` : `${total} uploaded. Live for the client.`);
   await load();
 }
 
@@ -495,11 +608,13 @@ function wireDetail(p) {
 
   $("#copyPortal").addEventListener("click", async () => {
     await navigator.clipboard.writeText(portalUrl(p));
-    toast("Portal link copied — text it to the client");
+    toast("Portal link copied. Text it to the client.");
   });
 
+  // back to the row he came from, not the top of a long list
   $("#backList").addEventListener("click", () => {
-    document.querySelector(".lpane").scrollIntoView({ behavior: "smooth", block: "start" });
+    const row = document.querySelector(".prow.sel");
+    (row || document.querySelector(".lpane")).scrollIntoView({ behavior: "smooth", block: row ? "center" : "start" });
   });
 
   $("#invCreate").addEventListener("click", async () => {
@@ -512,7 +627,7 @@ function wireDetail(p) {
     });
     if (error) { toast("Invoice failed"); return; }
     $("#invTitle").value = ""; $("#invAmt").value = "";
-    toast("Invoice sent — visible in client portal");
+    toast("Invoice sent. It's in the client portal.");
     await load();
   });
 
@@ -525,6 +640,7 @@ function wireDetail(p) {
     toast("Marked paid"); await load();
   }));
   $("#dpane").querySelectorAll("[data-inv-void]").forEach((b) => b.addEventListener("click", async () => {
+    if (!confirm("Void this invoice? The client won't be able to pay it.")) return;
     await sb.from("bk_invoices").update({ status: "void" }).eq("id", b.dataset.invVoid);
     toast("Invoice voided"); await load();
   }));
@@ -542,10 +658,13 @@ function wireDetail(p) {
     input.value = "";
     const { error } = await sb.from("bk_messages").insert({ project_id: p.id, sender: "studio", body });
     if (error) { input.value = body; toast("Send failed"); return; }
-    await load();
+    state.chatToEnd = true;
+    await load(true);
   });
+  $("#achatInput").addEventListener("input", (e) => autosize(e.target));
+  // Enter sends on a keyboard; on the phone Return is a new line (there's no Shift+Return) and Send sends
   $("#achatInput").addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#achatForm").requestSubmit(); }
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && !coarse()) { e.preventDefault(); $("#achatForm").requestSubmit(); }
   });
 
   $("#fileAdd").addEventListener("click", async () => {
@@ -553,7 +672,7 @@ function wireDetail(p) {
     if (!label || !/^https?:\/\//.test(url)) { toast("Need a label and a full https:// link"); return; }
     await sb.from("bk_files").insert({ project_id: p.id, label, url });
     $("#fileLabel").value = ""; $("#fileUrl").value = "";
-    toast("File added — live in portal"); await load();
+    toast("Link added. It's live in the portal."); await load();
   });
   $("#dpane").querySelectorAll("[data-file-del]").forEach((b) => b.addEventListener("click", async () => {
     await sb.from("bk_files").delete().eq("id", b.dataset.fileDel);
@@ -581,6 +700,8 @@ function wireDetail(p) {
     }));
 
   $("#dpane").querySelectorAll("[data-itemdel]").forEach((b) => b.addEventListener("click", async () => {
+    // on a phone the × is always showing, so a stray tap needs a check
+    if (coarse() && !confirm("Remove this file from the gallery?")) return;
     const cell = b.closest("[data-path]");
     if (cell) await sb.storage.from("project-media").remove([cell.dataset.path, thumbPath(cell.dataset.path)]);
     await sb.from("bk_gallery_items").delete().eq("id", b.dataset.itemdel);
@@ -643,7 +764,7 @@ async function loadContracts(p) {
   }
   const { data, error } = await sb.from("bk_contracts").select("*").eq("project_id", p.id).order("created_at");
   if (state.sel !== p.id || !$("#ctBox")) return; // switched projects while fetching
-  if (error) { $("#ctBox").innerHTML = `<span class="hud">CONTRACTS FAILED TO LOAD</span>`; return; }
+  if (error) { $("#ctBox").innerHTML = `<p class="acard-empty">Contracts didn't load. They'll retry on the next refresh.</p>`; return; }
   ctState.list = data || [];
   renderContracts(p);
 }
@@ -654,7 +775,7 @@ function ctViewBlock(c) {
       <pre class="doc">${esc(c.body || "")}</pre>
       ${c.status === "signed" ? `
         <div class="ct-sigblock">
-          <span class="hud"><span class="tick">&#10003;</span> SIGNED</span>
+          <span class="hud"><span class="tick">&#10003;</span> Signed</span>
           <div style="font-size:0.9rem;font-weight:600;margin-top:0.35rem;">${esc(c.signer_name || "")} · ${fmtD(c.signed_at)}</div>
           ${c.body_sha256 ? `<div class="hud" style="margin-top:0.35rem;color:var(--faint);">SHA-256 ${esc(c.body_sha256.slice(0, 16))}…</div>` : ""}
         </div>` : ""}
@@ -681,12 +802,12 @@ function renderContracts(p) {
   const rows = ctState.list.length ? ctState.list.map((c) => `
     <div class="ainv">
       <div>
-        <div class="t">${esc(c.title)} <span class="pill ${CT_PILL[c.status] || ""}" style="margin-left:0.4em;">${c.status}</span></div>
-        <small style="color:var(--faint);">${
+        <div class="t">${esc(c.title)}<span class="pill ${CT_PILL[c.status] || ""}">${c.status}</span></div>
+        <small>${
           c.status === "signed" ? `Signed by ${esc(c.signer_name || "")} · ${fmtD(c.signed_at)}`
           : c.status === "sent" ? `Sent ${fmtD(c.sent_at)} · waiting on the client`
           : c.status === "void" ? "Voided"
-          : "Draft — the client can't see this yet"}</small>
+          : "Draft: the client can't see this yet"}</small>
       </div>
       <div class="acts">
         ${c.status === "draft" && ctState.editing !== c.id ? `<button data-ct-edit="${c.id}">Edit</button>` : ""}
@@ -696,7 +817,7 @@ function renderContracts(p) {
     </div>
     ${ctState.viewing === c.id ? ctViewBlock(c) : ""}
     ${ctState.editing === c.id ? ctEditorBlock(c) : ""}`).join("")
-    : `<p style="color:var(--faint);font-size:0.85rem;margin:0;">No contracts yet. Start one from a template and send it for a signature.</p>`;
+    : `<p class="acard-empty">No contracts yet. Start from a template and send for signature.</p>`;
 
   const foot = ctState.picking
     ? ((ctState.templates || []).length ? `
@@ -708,10 +829,10 @@ function renderContracts(p) {
         <button class="btn btn-ghost" id="ctPickCancel">Cancel</button>
       </div>`
       : `<div class="ct-new">
-        <p style="color:var(--faint);font-size:0.85rem;margin:0;">No templates found — add one to bk_contract_templates first.</p>
-        <button class="btn btn-ghost" id="ctPickCancel">Close</button>
+        <p class="acard-empty">No templates found. Add one to bk_contract_templates first.</p>
+        <button class="btn btn-ghost btn-sm" id="ctPickCancel">Close</button>
       </div>`)
-    : `<div class="ct-new"><button class="btn btn-ghost" id="ctNewBtn">+ New contract</button></div>`;
+    : `<div class="ct-new"><button class="btn btn-ghost btn-sm" id="ctNewBtn">+ New contract</button></div>`;
 
   box.innerHTML = rows + foot;
   wireContracts(p);
@@ -785,7 +906,7 @@ function wireContracts(p) {
     const body = $("#ctBodyBox").value;
     if (!body.trim()) { toast("The contract body is empty."); return; }
     if ((body.includes("[REVIEW") || body.includes("[DESCRIBE")) &&
-        !confirm("Heads up — this contract still has [DESCRIBE…] or [REVIEW…] placeholders in it.\n\nSend it to the client anyway?")) return;
+        !confirm("Heads up: this contract still has [DESCRIBE…] or [REVIEW…] placeholders in it.\n\nSend it to the client anyway?")) return;
     ctSend.disabled = true;
     const { error } = await sb.from("bk_contracts")
       .update({ title, body, status: "sent", sent_at: new Date().toISOString() })
@@ -793,7 +914,7 @@ function wireContracts(p) {
     ctSend.disabled = false;
     if (error) { toast("Send failed"); return; }
     ctState.editing = null;
-    toast("Contract sent — client emailed automatically.");
+    toast("Contract sent. The client gets an email automatically.");
     await loadContracts(p);
   });
 
