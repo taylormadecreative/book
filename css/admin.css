@@ -392,7 +392,8 @@ body::after { display: none; }
 .dcol { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
 /* one column: the reply line moves up under the brief (the JS renumbers the cards to match) */
 @container dpane (max-width: 900px) {
-  .dgrid { display: flex; flex-direction: column; }
+  /* stretch: the cards are size containers, so "start" would shrink them to nothing */
+  .dgrid { display: flex; flex-direction: column; align-items: stretch; }
   .dcol { display: contents; }
   [data-k="brief"] { order: 1; } [data-k="messages"] { order: 2; } [data-k="invoices"] { order: 3; }
   [data-k="contracts"] { order: 4; } [data-k="notes"] { order: 5; } [data-k="files"] { order: 6; }
