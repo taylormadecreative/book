@@ -45,8 +45,8 @@ function mountMedia() {
   const card = $("#mediaCard");
   card.hidden = false;
   BKGallery.mount(root, { mode: "token", project_id: PID, token: TOKEN }).then((r) => {
-    // photos waiting on picks, or delivered edits, are the reason they opened the link: put them first
-    if (r && (r.openProof || r.delivered)) {
+    // photos waiting on picks, picks already sent, or delivered edits are the reason they opened the link: put them first
+    if (r && (r.openProof || r.picksSent || r.delivered)) {
       card.classList.add("media-first");
       $("#tracker").after(card);
     }

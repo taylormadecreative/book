@@ -2,7 +2,7 @@
  * Used by both the token portal (portal.html) and the logged-in hub (gallery.html).
  * Talks only to the bk-media edge function; no direct DB/storage access.
  *
- *   BKGallery.mount(containerEl, access) → Promise<{ openProof: boolean, delivered: boolean }>
+ *   BKGallery.mount(containerEl, access) → Promise<{ openProof: boolean, delivered: boolean, picksSent: boolean }>
  *     access = { mode:"token", project_id, token }
  *           | { mode:"session", jwt }        // Supabase access_token
  */
@@ -511,7 +511,7 @@
       data = await call(access, { action: "list" });
     } catch (_) {
       container.innerHTML = `<p class="g-empty">Couldn't load your media right now. Refresh to try again.</p>`;
-      return { openProof: false, delivered: false };
+      return { openProof: false, delivered: false, picksSent: false };
     }
     let signedAt = Date.now();
     const projects = data.projects || [];
@@ -535,10 +535,10 @@
     const hasAny = projects.some((p) => (p.galleries || []).length);
     if (!hasAny) {
       container.innerHTML = `<p class="g-empty">Nothing here yet. Once we shoot and Nelson uploads, your proofs, edits, and video show up here.</p>`;
-      return { openProof: false, delivered: false };
+      return { openProof: false, delivered: false, picksSent: false };
     }
     const multi = projects.length > 1;
-    let openProof = false, delivered = false;
+    let openProof = false, delivered = false, picksSent = false;
     // what they came for first: proofs waiting on picks, then edits + video, then proofs already sent
     // (a sent proof set can be hundreds of photos; the edits shouldn't sit under it)
     const rank = (g) => g.kind === "proof" ? (g.locked ? 3 : 0) : g.kind === "final" ? 1 : 2;
@@ -562,10 +562,11 @@
       p.galleries.slice().sort((a, b) => rank(a) - rank(b)).forEach((g) => {
         if (g.kind === "proof" && !g.locked && g.items.length) openProof = true;
         if (g.kind !== "proof" && g.items.length) delivered = true;
+        if (g.picksOnly) picksSent = true;
         container.appendChild(galleryBlock(access, p, g, resign, stale));
       });
     });
-    return { openProof, delivered };
+    return { openProof, delivered, picksSent };
   }
 
   window.BKGallery = { mount };
