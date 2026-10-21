@@ -432,6 +432,28 @@
     }
     wrap.appendChild(grid);
 
+    // v2 phones swipe through the finals sideways (client.css); dots say which one is in view
+    if (V2 && g.kind === "final" && g.items.length > 1) {
+      const dots = document.createElement("div");
+      dots.className = "g-dots";
+      dots.setAttribute("aria-hidden", "true");
+      dots.innerHTML = g.items.map((_, i) => `<i${i ? "" : ' class="on"'}></i>`).join("");
+      wrap.appendChild(dots);
+      let raf = 0;
+      grid.addEventListener("scroll", () => {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => {
+          const cell = grid.querySelector(".g-cell");
+          if (!cell) return;
+          const step = cell.getBoundingClientRect().width + parseFloat(getComputedStyle(grid).columnGap || 0);
+          const max = grid.scrollWidth - grid.clientWidth;
+          // the last card can't reach the left edge, so the end of the scroll counts as "last"
+          const at = grid.scrollLeft >= max - 2 ? g.items.length - 1 : Math.round(grid.scrollLeft / step);
+          [...dots.children].forEach((d, i) => d.classList.toggle("on", i === at));
+        });
+      }, { passive: true });
+    }
+
     const none = document.createElement("p");
     none.className = "g-empty g-none";
     none.hidden = true;

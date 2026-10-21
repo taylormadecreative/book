@@ -445,6 +445,7 @@ ol, ul { padding: 0; list-style: none; }
 .g-intro { margin-top: 0.6rem; color: var(--paper-muted); font-size: 1rem; max-width: 60ch; }
 .g-intro b { color: var(--paper-ink); }
 .g-empty { color: var(--paper-muted); padding: 1rem 0; }
+.g-dots { display: none; }
 .g-skel { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .g-skel i { aspect-ratio: 4 / 5; border-radius: var(--radius); background: var(--paper-well); animation: skel 1.4s ease-in-out infinite; }
 .g-skel i:first-child { grid-column: 1 / -1; aspect-ratio: auto; height: 56px; width: 40%; background: var(--paper-line); }
@@ -868,7 +869,28 @@ ol, ul { padding: 0; list-style: none; }
   .sec-h, .g-h { font-size: 2.3rem; }
   .sec-sub, .g-sub { font-size: 1rem; }
   .g-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
-  .g-grid-final { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  /* finals swipe sideways instead of stacking: one card plus a peek of the next */
+  .g-grid-final {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 84%;
+    gap: 12px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: var(--gutter);
+    margin-inline: calc(-1 * var(--gutter));
+    padding: 2px var(--gutter) 4px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .g-grid-final::-webkit-scrollbar { display: none; }
+  .g-grid-final > .g-cell { scroll-snap-align: start; }
+  .g-grid-final > .g-cell:last-child { scroll-snap-align: end; }
+  .g-grid-final:has(> .g-cell:only-child) { grid-auto-columns: 100%; }
+  .g-dots { display: flex; justify-content: center; gap: 8px; margin-top: 12px; }
+  .g-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--paper-edge); transition: background-color 160ms ease, transform 160ms var(--ease); }
+  .g-dots i.on { background: var(--paper-ink); transform: scale(1.15); }
   .g-orig { flex-wrap: wrap; gap: 0.9rem 1rem; padding: 0.9rem 1rem; }
   .g-orig-thumbs { padding-right: 0; border-right: 0; }
   .g-orig-thumbs img { width: 52px; height: 52px; }

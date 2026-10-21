@@ -382,6 +382,22 @@ try {
   const tabsFit = await page.evaluate(() => { const t = document.querySelector(".tabs"); return t.scrollWidth <= t.clientWidth; });
   ok(tabsFit, "phone: all four tabs fit without sideways scrolling");
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/ready-390.png` });
+  // phones swipe through the finals: one card plus a peek, dots follow, the last card lands fully on screen
+  await page.waitForFunction(() => [...document.querySelectorAll(".g-cell.final img")].every((i) => i.complete && i.naturalWidth));
+  const row = await page.evaluate(() => {
+    const g = document.querySelector(".g-grid-final"), cells = [...g.querySelectorAll(".g-cell")].map((c) => c.getBoundingClientRect());
+    return { scrolls: g.scrollWidth > g.clientWidth, first: cells[0].left, peek: cells[1].left < innerWidth, sameRow: cells[0].top === cells[2].top, dots: document.querySelectorAll(".g-dots i").length };
+  });
+  ok(row.scrolls && row.sameRow && row.peek && row.first >= 15 && row.first <= 17 && row.dots === 3, "phone: finals in one swipe row with a peek: " + JSON.stringify(row));
+  await page.locator(".g-grid-final").evaluate((g) => g.scrollTo({ left: g.scrollWidth }));
+  await page.waitForTimeout(300);
+  const end = await page.evaluate(() => { const r = [...document.querySelectorAll(".g-cell.final")].pop().getBoundingClientRect(); return { right: r.right, left: r.left, on: [...document.querySelectorAll(".g-dots i")].findIndex((d) => d.classList.contains("on")) }; });
+  ok(end.right <= 390 - 15 && end.left > 0 && end.on === 2, "phone: last card fully on screen, third dot lit: " + JSON.stringify(end));
+  ok((await overflow(page)) <= 0, "phone: swipe row doesn't widen the page");
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/ready-390-swiped.png` });
+  await page.setViewportSize({ width: 1536, height: 1024 });
+  ok(await page.locator(".g-dots").isHidden() && (await page.evaluate(() => { const c = [...document.querySelectorAll(".g-cell.final")].map((x) => x.getBoundingClientRect().top); return c[0] === c[2]; })), "desktop: dots hidden, three cards in a row");
+  await page.setViewportSize({ width: 390, height: 844 });
 
   // after the 2h signed links go stale, a card's Download re-signs before following the link
   const stalePage = await ctx.newPage();
@@ -411,6 +427,13 @@ try {
   await wp.waitForSelector("#app:not([hidden])");
   ok((await text(wp, "#headline")) === "Your photos are ready.", "webkit: ready headline");
   ok((await overflow(wp)) <= 0, "webkit: no horizontal scroll");
+  await wp.waitForFunction(() => [...document.querySelectorAll(".g-cell.final img")].every((i) => i.complete && i.naturalWidth));
+  await wp.locator(".g-grid-final").evaluate((g) => g.scrollTo({ left: g.scrollWidth }));
+  await wp.waitForTimeout(400);
+  const wend = await wp.evaluate(() => { const r = [...document.querySelectorAll(".g-cell.final")].pop().getBoundingClientRect(); return { right: Math.round(r.right), on: [...document.querySelectorAll(".g-dots i")].findIndex((d) => d.classList.contains("on")) }; });
+  ok(wend.right <= 390 - 15 && wend.on === 2, "webkit: swipe row ends with the last card fully on screen: " + JSON.stringify(wend));
+  if (SHOTS) await wp.screenshot({ path: `${SHOTS}/webkit-390-swiped.png` });
+  await wp.locator(".g-grid-final").evaluate((g) => g.scrollTo({ left: 0 }));
   const wdl = wp.waitForEvent("download", { timeout: 15000 });
   await wp.tap("#heroCta .btn");
   ok(/\.zip$/.test((await wdl).suggestedFilename()), "webkit: zip downloads");
