@@ -10,6 +10,8 @@
  *       and portal-v1.html leave it off and keep the original look.
  *     finals = { count, mb, download(btn) } for the hero "Download all" button (v2 drops
  *       the in-gallery one), proof = { el, count, limit } of the open proof set.
+ *     opts.extras = { cents, request(galleryId, itemIds) } offers extra edits past the included
+ *       picks (v2 only): picked locally, then one request once they confirm the total.
  *     Fires "bkgallery:sent" on the container when picks are sent.
  */
 (function () {
@@ -71,18 +73,40 @@
     toastEl.textContent = msg;
     toastEl.classList.add("show");
     clearTimeout(toastEl._h);
-    toastEl._h = setTimeout(() => toastEl.classList.remove("show"), 2800);
+    toastEl._h = setTimeout(() => toastEl.classList.remove("show"), Math.max(2800, msg.length * 55));
   }
 
   const pickedCount = (g) => g.items.filter((i) => i.selected).length;
   const canPick = (g) => g.kind === "proof" && !g.locked;
+  const pickable = (ctx) => ctx.mode === "extras" || canPick(ctx.g);
+  const isOn = (it) => !!(it.selected || it.extraPending);
+  // extra edits past the included picks: offered when the page passes a price and the set has a limit
+  const xCount = (ctx) => (ctx.extra ? ctx.extra.size : 0);
+  const extrasOn = (ctx) => V2 && !!(ctx.opts && ctx.opts.extras && ctx.opts.extras.cents) && ctx.g.selection_limit != null;
+  const dollars = (c) => `$${c % 100 ? (c / 100).toFixed(2) : c / 100}`;
+  const xPrice = (ctx) => dollars(ctx.opts.extras.cents);
+  const xTotal = (ctx) => dollars(xCount(ctx) * ctx.opts.extras.cents);
 
   /* ---------------- picking (shared by grid + lightbox) ---------------- */
   async function setPick(ctx, it, want) {
     const { g } = ctx;
+    // extras stay on this device until they confirm the total: nothing is saved or charged per tap
+    if (ctx.mode === "extras" || (!want && it.extraPending)) {
+      it.extraPending = want;
+      if (want) ctx.extra.add(it.id); else ctx.extra.delete(it.id);
+      syncPick(ctx, it);
+      return;
+    }
     if (!canPick(g) || it.selected === want) return;
     const lim = g.selection_limit;
     if (want && lim != null && pickedCount(g) >= lim) {
+      if (extrasOn(ctx)) {
+        it.extraPending = true;
+        ctx.extra.add(it.id);
+        syncPick(ctx, it);
+        if (!ctx.xNoted) { ctx.xNoted = true; toast(`Added as an extra edit (${xPrice(ctx)}). Your first ${lim} picks are included.`); }
+        return;
+      }
       toast(`That's ${lim} picks, the max. Unpick one to swap it.`);
       return;
     }
@@ -90,6 +114,11 @@
     syncPick(ctx, it);
     try {
       await call(ctx.access, { action: "toggle_select", item_id: it.id, selected: want });
+      // an included pick freed up: the first extra moves into it
+      if (!want && xCount(ctx)) {
+        const next = g.items.find((x) => x.extraPending);
+        if (next) { next.extraPending = false; ctx.extra.delete(next.id); await setPick(ctx, next, true); }
+      }
     } catch (err) {
       it.selected = !want; // revert
       syncPick(ctx, it);
@@ -104,8 +133,9 @@
     const cell = ctx.wrap.querySelector(`.g-cell[data-id="${it.id}"]`);
     if (cell) {
       cell.classList.toggle("sel", !!it.selected);
+      cell.classList.toggle("xtra", !!it.extraPending);
       const b = cell.querySelector(".g-pick");
-      if (b) b.setAttribute("aria-pressed", it.selected ? "true" : "false");
+      if (b) b.setAttribute("aria-pressed", isOn(it) ? "true" : "false");
     }
     renderTools(ctx);
     renderSelbar(ctx);
@@ -147,7 +177,7 @@
       if (e.target.closest(".g-lb-dl") && lb.ctx) { freshDownload(e, lb.ctx, lb.list[lb.i]); return; }
       if (e.target.closest(".g-lb-pick")) {
         const it = lb.list[lb.i];
-        if (it) setPick(lb.ctx, it, !it.selected);
+        if (it) setPick(lb.ctx, it, !isOn(it));
       }
     });
 
@@ -170,9 +200,9 @@
       if (e.key === "Escape") { e.preventDefault(); closeLightbox(); }
       else if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
       else if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
-      else if ((e.key === "p" || e.key === "P") && !e.metaKey && !e.ctrlKey && canPick(lb.ctx.g)) {
+      else if ((e.key === "p" || e.key === "P") && !e.metaKey && !e.ctrlKey && pickable(lb.ctx)) {
         const it = lb.list[lb.i];
-        if (it) setPick(lb.ctx, it, !it.selected);
+        if (it) setPick(lb.ctx, it, !isOn(it));
       } else if (e.key === "Tab") trapFocus(e);
     });
     return el;
@@ -255,15 +285,20 @@
 
     const bar = lb.el.querySelector(".g-lb-bar");
     if (g.kind === "proof") {
-      const n = pickedCount(g), lim = g.selection_limit;
-      const tally = `${n}${lim != null ? ` of ${lim}` : ""} picked`;
-      if (g.locked) {
+      const n = pickedCount(g), lim = g.selection_limit, x = xCount(ctx);
+      const choosing = ctx.mode === "extras";
+      const tally = choosing ? `${x} extra edit${x === 1 ? "" : "s"}${x ? ` · ${xTotal(ctx)}` : ""}`
+        : `${n}${lim != null ? ` of ${lim}` : ""} picked${x ? ` + ${x} extra` : ""}`;
+      if (g.locked && !choosing) {
         bar.innerHTML = `<span class="g-lb-tally">${it.selected ? `${V2 ? "" : "✓ "}One of your picks` : "Picks sent"} · ${tally}</span>`;
       } else {
+        const full = !choosing && lim != null && n >= lim && !it.selected;
+        const label = it.selected ? `${CHECK()} Picked`
+          : it.extraPending ? `${CHECK()} Extra edit added`
+          : choosing || (full && extrasOn(ctx)) ? `Add as an extra edit · ${xPrice(ctx)}`
+          : "Pick this photo";
         bar.innerHTML = `
-          <button class="g-lb-pick${it.selected ? " on" : ""}" aria-pressed="${it.selected ? "true" : "false"}">
-            ${it.selected ? `${CHECK()} Picked` : "Pick this photo"}
-          </button>
+          <button class="g-lb-pick${isOn(it) ? " on" : ""}" aria-pressed="${isOn(it) ? "true" : "false"}">${label}</button>
           <span class="g-lb-tally">${tally}<span class="g-lb-hint"> · press P to pick, arrows to browse</span></span>`;
       }
     } else if (it.download_url) {
@@ -279,7 +314,8 @@
     wrap.className = "g-block";
     wrap.dataset.kind = g.kind;
     const shown = (it) => (opts.displayName ? opts.displayName(it.filename || "", project) : it.filename) || "";
-    const ctx = { access, g, wrap, filter: "all", confirming: false, resign, stale, shown };
+    const ctx = { access, project, g, wrap, filter: "all", confirming: false, resign, stale, shown, opts,
+      extra: new Set(), mode: opts.extrasFor ? "extras" : null, real: opts.extrasFor || g, done: opts.extrasDone };
 
     // v2: once edits land, the sent picks fold into one row that opens them in the viewer
     if (V2 && g.picksOnly && g.delivered) {
@@ -291,30 +327,36 @@
             `<img loading="lazy" decoding="async" src="${esc(it.thumb_url || it.url)}" alt="">`).join("")}</span>
           <span class="g-orig-text"><b>Your original selections</b><small>${esc(g.title)} · ${n} selected</small></span>
           <span class="g-orig-cta">View selections ${ICON.chevron}</span>
-        </button>`;
+        </button>${extrasOn(ctx) ? `
+        <div class="g-more"><span>Want another photo edited? Extra edits are ${xPrice(ctx)} each.</span>
+          <button class="btn btn-ghost g-addx" type="button">Add extra edits</button></div>` : ""}`;
       wrap.querySelector(".g-orig").addEventListener("click", (e) => openLightbox(ctx, g.items.slice(), 0, e.currentTarget));
+      wrap.querySelector(".g-addx")?.addEventListener("click", () => openExtras(ctx));
       return wrap;
     }
 
     const lim = g.selection_limit;
     const intro = g.kind !== "proof" || !g.items.length ? ""
+      : ctx.mode === "extras" ? `<p class="g-intro">Tap the photos you want edited too. They're <b>${xPrice(ctx)}</b> each, and you'll see the total before anything is charged.</p>`
       : g.locked ? ""
       : `<p class="g-intro">Tap any photo to see it big. ${lim != null
           ? `Pick up to <b>${lim}</b> for editing`
-          : "Pick your favorites for editing"}, then send them to Nelson.</p>`;
+          : "Pick your favorites for editing"}, then send them to Nelson.${extrasOn(ctx) ? ` Want more? Extra edits are ${xPrice(ctx)} each.` : ""}</p>`;
 
     const head = document.createElement("div");
     head.className = "g-block-head";
     if (V2) {
       const n = g.items.length, s = (w) => (n === 1 ? w : w + "s");
-      const h = g.kind === "final" ? "Final photos" : g.kind === "video" ? (n > 1 ? "Final videos" : "Final video")
+      const h = ctx.mode === "extras" ? "Add extra edits"
+        : g.kind === "final" ? "Final photos" : g.kind === "video" ? (n > 1 ? "Final videos" : "Final video")
         : g.picksOnly ? "Your picks" : g.locked ? "Your proofs" : "Pick your favorites";
-      const sub = !n ? g.title
+      const sub = ctx.mode === "extras" ? `${g.title} · ${n} more ${s("photo")} to choose from`
+        : !n ? g.title
         : g.kind === "final" ? `${n} edited ${s("photo")} · Full resolution`
         : g.kind === "video" ? `${g.title} · ${n} ${s("video")}`
         : g.picksOnly ? `${g.title} · ${n} selected`
         : `${g.title} · ${n} ${s("proof")}`;
-      head.innerHTML = `<div><h2 class="g-h">${esc(h)}</h2><p class="g-sub">${esc(sub)}</p>${intro}</div>`;
+      head.innerHTML = `<div><h2 class="g-h" tabindex="-1">${esc(h)}</h2><p class="g-sub">${esc(sub)}</p>${intro}</div>`;
     } else {
       head.innerHTML = `
       <div>
@@ -373,7 +415,7 @@
     }
 
     // proof: All / Picked filter (only while picking; sent picks already show just the picks)
-    if (g.kind === "proof" && !g.locked) {
+    if (g.kind === "proof" && !g.locked && ctx.mode !== "extras") {
       const tools = document.createElement("div");
       tools.className = "g-tools";
       tools.setAttribute("role", "group");
@@ -394,7 +436,7 @@
     grid.className = "g-grid" + (g.kind === "final" ? " g-grid-final" : "");
     g.items.forEach((it, idx) => {
       const cell = document.createElement("figure");
-      cell.className = "g-cell" + (g.kind === "final" ? " final" : "") + (it.selected ? " sel" : "");
+      cell.className = "g-cell" + (g.kind === "final" ? " final" : "") + (it.selected ? " sel" : "") + (it.extraPending ? " xtra" : "");
       cell.dataset.id = it.id;
       const n = idx + 1;
       const fin = V2 && g.kind === "final";
@@ -403,7 +445,7 @@
           <img loading="lazy" decoding="async" src="${esc(it.thumb_url || it.url)}" alt="">${fin ? `<span class="g-expand" aria-hidden="true">${ICON.expand}</span>` : ""}
         </button>` +
         (g.kind === "proof"
-          ? (g.locked ? "" : `<button class="g-pick" aria-pressed="${it.selected ? "true" : "false"}" aria-label="Pick photo ${n}"><span>${CHECK()}</span></button>`)
+          ? (g.locked ? "" : `<button class="g-pick" aria-pressed="${isOn(it) ? "true" : "false"}" aria-label="${ctx.mode === "extras" ? "Add" : "Pick"} photo ${n}"><span>${CHECK()}</span></button>`)
           : fin
             ? `<figcaption class="g-cap"><span class="g-fn">${esc(shown(it))}</span><a class="g-save" href="${esc(it.download_url || it.url)}" aria-label="Download ${esc(shown(it) || `photo ${n}`)}">${ICON.download}<span>Download</span></a></figcaption>`
             : `<a class="g-save" href="${esc(it.download_url || it.url)}" aria-label="Download photo ${n}"><span aria-hidden="true">&#8595;</span> Download</a>`);
@@ -414,7 +456,7 @@
       if (!cell) return;
       const it = g.items.find((x) => x.id === cell.dataset.id);
       if (!it) return;
-      if (e.target.closest(".g-pick")) { setPick(ctx, it, !it.selected); return; }
+      if (e.target.closest(".g-pick")) { setPick(ctx, it, !isOn(it)); return; }
       if (e.target.closest(".g-save")) { freshDownload(e, ctx, it); return; }
       const opener = e.target.closest(".g-open");
       if (opener) {
@@ -468,7 +510,9 @@
       bar.addEventListener("click", (e) => {
         if (e.target.closest(".g-submit")) { ctx.confirming = true; renderSelbar(ctx); bar.querySelector(".g-send")?.focus(); }
         else if (e.target.closest(".g-cancel")) { ctx.confirming = false; renderSelbar(ctx); bar.querySelector(".g-submit")?.focus(); }
-        else if (e.target.closest(".g-send")) submitPicks(ctx);
+        else if (e.target.closest(".g-send")) (ctx.mode === "extras" ? submitExtras : submitPicks)(ctx);
+        else if (e.target.closest(".g-xcancel")) ctx.done(false);
+        else if (e.target.closest(".g-addx")) openExtras(ctx);
         else if (e.target.closest(".g-showpicks")) { ctx.filter = "picked"; renderTools(ctx); applyFilter(ctx); wrap.scrollIntoView({ block: "start" }); }
       });
       renderSelbar(ctx);
@@ -476,12 +520,12 @@
     return wrap;
   }
 
-  const visibleItems = (ctx) => ctx.filter === "picked" ? ctx.g.items.filter((i) => i.selected) : ctx.g.items.slice();
+  const visibleItems = (ctx) => ctx.filter === "picked" ? ctx.g.items.filter(isOn) : ctx.g.items.slice();
 
   function renderTools(ctx) {
     const tools = ctx.wrap.querySelector(".g-tools");
     if (!tools) return;
-    const n = pickedCount(ctx.g);
+    const n = pickedCount(ctx.g) + xCount(ctx);
     tools.innerHTML = `
       <button data-filter="all" aria-pressed="${ctx.filter === "all"}">All <span>${ctx.g.items.length}</span></button>
       <button data-filter="picked" aria-pressed="${ctx.filter === "picked"}">Picked <span>${n}</span></button>`;
@@ -491,7 +535,7 @@
     const picked = ctx.filter === "picked";
     let shown = 0;
     ctx.wrap.querySelectorAll(".g-cell").forEach((cell) => {
-      const hide = picked && !cell.classList.contains("sel");
+      const hide = picked && !cell.classList.contains("sel") && !cell.classList.contains("xtra");
       cell.hidden = hide;
       if (!hide) shown++;
     });
@@ -504,31 +548,55 @@
     const g = ctx.g;
     const n = pickedCount(g);
     const lim = g.selection_limit;
+    const x = xCount(ctx), xs = x === 1 ? "" : "s";
+    if (ctx.mode === "extras") {
+      bar.classList.add("live");
+      if (ctx.confirming && x) {
+        bar.innerHTML = `
+        <span class="g-confirm">Add ${x} extra edit${xs} for ${xTotal(ctx)}? You'll pay on the next step.</span>
+        <span class="g-actions">
+          <button class="btn btn-ghost g-cancel">Back</button>
+          <button class="btn btn-gold g-send">Yes, add ${x}</button>
+        </span>`;
+        return;
+      }
+      ctx.confirming = false;
+      bar.innerHTML = `
+      <span class="g-count">${x ? `${x} extra edit${xs} · ${xTotal(ctx)}` : "Tap photos to add them"}</span>
+      <span class="g-actions">
+        <button class="btn btn-ghost g-xcancel">Cancel</button>
+        <button class="btn btn-gold g-submit"${x ? "" : " disabled"}>Add ${x ? `${x} · ${xTotal(ctx)}` : "extra edits"}</button>
+      </span>`;
+      return;
+    }
     if (g.locked) {
       bar.classList.remove("live");
       bar.innerHTML = V2
-        ? `<span class="g-sent">${ICON.check} Picks sent · ${n} chosen</span>` // the page hero says what happens next
+        ? `<span class="g-sent">${ICON.check} Picks sent · ${n} chosen</span>${extrasOn(ctx) // the page hero says what happens next
+          ? `<button class="btn btn-ghost g-addx" type="button">Add extra edits · ${xPrice(ctx)} each</button>` : ""}`
         : `<span class="pill green">Picks sent ✓ &nbsp;${n} chosen</span>
         <span class="g-selnote">${g.delivered ? "Your edited versions are up top in “Edited photos”."
           : "Nelson is editing your picks. Final images land in “Edited photos”."}</span>`;
       return;
     }
-    bar.classList.toggle("live", n > 0);
+    bar.classList.toggle("live", n > 0 || x > 0);
     if (ctx.confirming && n > 0) {
       bar.innerHTML = `
-        <span class="g-confirm">Send these ${n} to Nelson? Picks lock once they're sent.</span>
+        <span class="g-confirm">${x
+          ? `Send ${n} pick${n === 1 ? "" : "s"} + ${x} extra edit${xs} (${xTotal(ctx)})? Picks lock once they're sent, and you'll pay for the extras right here.`
+          : `Send these ${n} to Nelson? Picks lock once they're sent.`}</span>
         <span class="g-actions">
           <button class="btn btn-ghost g-cancel">Keep picking</button>
-          <button class="btn btn-gold g-send">Yes, send ${n}</button>
+          <button class="btn btn-gold g-send">Yes, send ${n + x}</button>
         </span>`;
       return;
     }
     ctx.confirming = false;
     bar.innerHTML = `
-      <span class="g-count">${n}${lim != null ? ` of ${lim}` : ""} picked</span>
+      <span class="g-count">${n}${lim != null ? ` of ${lim}` : ""} picked${x ? ` + ${x} extra · ${xTotal(ctx)}` : ""}</span>
       <span class="g-actions">
         ${n ? `<button class="btn btn-ghost g-showpicks">Review picks</button>` : ""}
-        <button class="btn btn-gold g-submit"${n < 1 ? " disabled" : ""}>Send ${n ? n + " " : ""}pick${n === 1 ? "" : "s"} to Nelson</button>
+        <button class="btn btn-gold g-submit"${n < 1 ? " disabled" : ""}>Send ${n + x ? n + x + " " : ""}pick${n + x === 1 ? "" : "s"} to Nelson</button>
       </span>`;
   }
 
@@ -575,11 +643,52 @@
     }
   }
 
+  // a sent set reopens as a chooser of the photos that aren't picks yet
+  function openExtras(ctx) {
+    const g = ctx.real;
+    const pool = (g.all || g.items).filter((i) => !i.selected);
+    if (!pool.length) { toast("Every photo in this set is already one of your picks."); return; }
+    pool.forEach((i) => { i.extraPending = false; });
+    const gx = { ...g, items: pool, locked: false, picksOnly: false, delivered: false };
+    const back = (added) => {
+      pool.forEach((i) => { i.extraPending = false; });
+      if (added) { g.items = (g.all || g.items).filter((i) => i.selected); g.picksOnly = true; }
+      const fresh = galleryBlock(ctx.access, ctx.project, g, ctx.resign, ctx.stale, { ...ctx.opts, extrasFor: null, extrasDone: null });
+      chooser.replaceWith(fresh);
+      fresh.querySelector(".g-h, .g-orig")?.focus({ preventScroll: true });
+    };
+    const chooser = galleryBlock(ctx.access, ctx.project, gx, ctx.resign, ctx.stale, { ...ctx.opts, extrasFor: g, extrasDone: back });
+    ctx.wrap.replaceWith(chooser);
+    chooser.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    chooser.querySelector(".g-h")?.focus({ preventScroll: true });
+  }
+
+  async function submitExtras(ctx) {
+    const ids = [...ctx.extra];
+    const btn = ctx.wrap.querySelector(".g-send");
+    if (!ids.length) return;
+    if (btn) { btn.disabled = true; btn.textContent = "Adding…"; }
+    try {
+      const r = await ctx.opts.extras.request(ctx.real.id, ids);
+      ctx.g.items.forEach((i) => { if (ctx.extra.has(i.id)) { i.selected = true; i.extra = true; } });
+      ctx.extra.clear();
+      toast(`Added ${r.count} extra edit${r.count === 1 ? "" : "s"}. Pay ${dollars(r.amount_cents)} at the top of the page to lock ${r.count === 1 ? "it" : "them"} in.`);
+      ctx.done(true);
+    } catch (err) {
+      if (btn) { btn.disabled = false; btn.textContent = `Yes, add ${ids.length}`; }
+      toast(err.message === "nothing_to_add" ? "Those are already in your picks." : "Couldn't add those just now. Try again.");
+    }
+  }
+
   // picks are locked in: drop the pick controls (v2 also narrows the set to the picks, as a reload would)
   function afterSent(ctx) {
     const { g, wrap } = ctx;
     wrap.querySelectorAll(".g-pick").forEach((b) => b.remove());
     wrap.querySelector(".g-intro")?.remove();
+    wrap.querySelectorAll(".g-cell").forEach((cell) => {
+      const it = g.items.find((x) => x.id === cell.dataset.id);
+      if (it) { cell.classList.toggle("sel", !!it.selected); cell.classList.remove("xtra"); }
+    });
     if (V2) {
       g.picksOnly = true;
       wrap.querySelector(".g-tools")?.remove();
@@ -601,8 +710,21 @@
       const r = await call(ctx.access, { action: "submit_selections", gallery_id: g.id });
       g.locked = true;
       ctx.confirming = false;
+      let more = "";
+      if (xCount(ctx) && extrasOn(ctx)) {
+        const ids = [...ctx.extra];
+        try {
+          const xr = await ctx.opts.extras.request(g.id, ids);
+          g.items.forEach((i) => { if (ctx.extra.has(i.id)) { i.selected = true; i.extra = true; } });
+          more = ` Pay ${dollars(xr.amount_cents)} at the top of the page for your extra edit${xr.count === 1 ? "" : "s"}.`;
+        } catch (_) {
+          more = " Your extra edits didn't go through. Tap Add extra edits to try again.";
+        }
+        g.items.forEach((i) => { i.extraPending = false; });
+        ctx.extra.clear();
+      }
       afterSent(ctx);
-      toast(`Sent ${r.count} pick${r.count === 1 ? "" : "s"} to Nelson.`);
+      toast(`Sent ${r.count} pick${r.count === 1 ? "" : "s"} to Nelson.${more}`);
     } catch (err) {
       if (err.message === "already_submitted") {
         g.locked = true; ctx.confirming = false;
@@ -670,6 +792,7 @@
       const gotEdits = p.galleries.some((g) => g.kind !== "proof" && g.items.length);
       p.galleries.forEach((g) => {
         // once picks are sent, show just the chosen ones (a proof set can be hundreds of photos)
+        if (g.kind === "proof") g.all = g.items.slice();
         if (g.kind === "proof" && g.locked && g.items.some((i) => i.selected)) {
           g.items = g.items.filter((i) => i.selected);
           g.picksOnly = true;

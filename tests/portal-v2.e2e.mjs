@@ -51,6 +51,13 @@ const S = {
     { id: "gf", kind: "final", title: "Headshots — Edits", locked: false, selection_limit: null, items: finals("gf") }] }),
   picking: () => ({ p: project("p-picking", { status: "in_production" }), inv: [paid], galleries: [
     { id: "go", kind: "proof", title: "Headshots — Oct 12", locked: false, selection_limit: 3, items: proofs("go") }] }),
+  plain: () => ({ p: project("p-plain", { status: "in_production" }), inv: [paid], galleries: [
+    { id: "gq", kind: "proof", title: "Headshots — Oct 12", locked: false, selection_limit: 3, items: proofs("gq") }] }),
+  editing2: () => ({ p: project("p-editing2", { status: "in_production" }), inv: [paid], galleries: [
+    { id: "ge2", kind: "proof", title: "Headshots — Oct 12", locked: true, selection_limit: 3, items: proofs("ge2", [6715, 6722, 6741]) }] }),
+  ready2: () => ({ p: project("p-ready2"), inv: [paid], galleries: [
+    { id: "gp2", kind: "proof", title: "Headshots — Oct 12", locked: true, selection_limit: 3, items: proofs("gp2", [6715, 6722, 6741]) },
+    { id: "gf3", kind: "final", title: "Headshots — Edits", locked: false, selection_limit: null, items: finals("gf3") }] }),
   editing: () => ({ p: project("p-editing", { status: "in_production" }), inv: [paid], galleries: [
     { id: "ge", kind: "proof", title: "Headshots — Oct 12", locked: true, selection_limit: 3, items: proofs("ge", [6715, 6722, 6741]) }] }),
   pay: () => ({ p: project("p-pay", { status: "quoted", title: "Marisol Vega — Brand Content Day", event_date: future, client_name: "Marisol Vega", service: "brand_content" }),
@@ -98,10 +105,24 @@ async function wire(page, errors) {
     const fn = new URL(route.request().url()).pathname.split("/").pop();
     const body = route.request().postDataJSON() || {};
     calls.push({ fn, body });
+    if (fn === "bk_extra_edit_cents") return route.fulfill({ json: 3500 });
     const s = body.p_token === "tok" ? get(body.p_project) : null;
     if (!s) return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ message: "not_found" }) });
     if (fn === "bk_portal") return route.fulfill({ json: { project: s.p, invoices: s.inv, contracts: s.contracts, files: s.files, messages: s.msgs } });
     if (fn === "bk_portal_send") { s.msgs.push({ id: `m${s.msgs.length + 1}`, sender: "client", created_at: new Date().toISOString(), body: body.p_body }); return route.fulfill({ json: null }); }
+    if (fn === "bk_portal_request_extras") {
+      // mirrors the SQL: a sent set only, never-picked photos only, $35 each, one invoice + a message
+      const g = s.galleries.find((x) => x.id === body.p_gallery);
+      if (!g || !g.locked) return route.fulfill({ status: 400, json: { message: g ? "send_picks_first" : "not found" } });
+      const add = g.items.filter((i) => body.p_items.includes(i.id) && !i.selected);
+      if (!add.length) return route.fulfill({ status: 400, json: { message: "nothing_to_add" } });
+      add.forEach((i) => { i.selected = true; i.extra = true; });
+      const inv = { id: `inv-x${s.inv.length}`, kind: "custom", title: "Extra edits", status: "sent", due_date: "2026-10-21", amount_cents: add.length * 3500,
+        line_items: [{ title: `Extra edits · ${add.length} photo${add.length === 1 ? "" : "s"} × $35`, amount_cents: add.length * 3500 }] };
+      s.inv.push(inv);
+      s.msgs.push({ id: `mx${s.msgs.length}`, sender: "client", created_at: new Date().toISOString(), body: `Added ${add.length} extra edits` });
+      return route.fulfill({ json: { ok: true, invoice_id: inv.id, count: add.length, amount_cents: inv.amount_cents } });
+    }
     if (fn === "bk_portal_sign_contract") {
       const c = s.contracts.find((x) => x.id === body.p_contract);
       Object.assign(c, { status: "signed", signer_name: body.p_signer_name, signed_at: new Date().toISOString() });
@@ -250,18 +271,86 @@ try {
   ok((await page.locator(".tk.now .tk-label").innerText()).startsWith("Production"), "current stage marked");
   await page.click("#heroCta .btn");
   for (const n of [1, 2, 3]) await page.click(`.g-cell:nth-child(${n}) .g-pick`);
-  await page.click(".g-cell:nth-child(4) .g-pick");
-  ok(/max/.test(await text(page, ".g-toast")), "4th pick blocked with a toast");
   ok((await text(page, ".g-count")) === "3 of 3 picked", "pick count");
+  ok(/Extra edits are \$35 each/.test(await text(page, ".g-intro")), "picking intro mentions extras and the price");
+  const togglesBefore = calls.filter((c) => c.body.action === "toggle_select").length;
+  await page.click(".g-cell:nth-child(4) .g-pick");
+  await page.click(".g-cell:nth-child(5) .g-pick");
+  ok(/extra edit \(\$35\)/.test(await text(page, ".g-toast")), "a 4th pick becomes an extra, and says so");
+  ok((await page.locator(".g-cell.xtra").count()) === 2 && calls.filter((c) => c.body.action === "toggle_select").length === togglesBefore, "extras are local: no server call per tap");
+  ok((await text(page, ".g-count")) === "3 of 3 picked + 2 extra · $70", "bar shows the extras total");
+  await page.click(".g-cell:nth-child(5) .g-pick");
+  ok((await page.locator(".g-cell.xtra").count()) === 1 && (await text(page, ".g-count")) === "3 of 3 picked + 1 extra · $35", "tapping an extra again removes it");
+  await page.click(".g-cell:nth-child(6) .g-open");
+  ok(/Add as an extra edit · \$35/.test(await text(page, ".g-lb-bar")), "viewer offers 'Add as an extra edit' past the limit");
+  await page.keyboard.press("Escape");
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/picking-1536.png` });
   await page.click(".g-submit");
+  ok(/\+ 1 extra edit \(\$35\)/.test(await text(page, ".g-confirm")), "confirm shows the extras total before anything locks");
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/picking-confirm-1536.png` });
   await page.click(".g-send");
-  await page.waitForFunction(() => document.querySelector("#headline").textContent === "Your picks are in.");
-  ok((await page.locator(".g-cell:not([hidden])").count()) === 3, "after sending, only the picks show");
+  await page.waitForFunction(() => document.querySelector("#headline").textContent === "Lock in your extra edits.");
+  const xreq = calls.filter((c) => c.fn === "bk_portal_request_extras").pop();
+  ok(xreq && xreq.body.p_items.length === 1 && xreq.body.p_items[0] === "go-6701" && xreq.body.p_gallery === "go", "extras requested right after the picks: " + JSON.stringify(xreq && xreq.body));
+  ok((await text(page, "#heroCta .btn")).includes("Pay $35.00") && /1 photo × \$35/.test(await text(page, "#heroCta .hero-note")) === false, "hero asks for the $35");
+  ok((await page.locator(".g-cell:not([hidden])").count()) === 4, "after sending, the 3 picks + the extra show");
   ok((await text(page, ".g-h")) === "Your picks", "heading switches to Your picks");
   await page.reload();
   await page.waitForSelector("#app:not([hidden])");
-  ok((await text(page, "#headline")) === "Your picks are in." && (await page.locator(".g-cell").count()) === 3, "picks state survives reload");
+  ok((await text(page, "#headline")) === "Lock in your extra edits." && (await page.locator(".g-cell").count()) === 4, "picks + extra survive reload");
+  ok(/Extra edits · 1 photo × \$35/.test(await page.locator("#pInvoices").textContent()), "invoice line item shows (title, not label)");
+
+  /* --- no price from the studio: no extras, the old limit message --- */
+  await page.route("**/rest/v1/rpc/bk_extra_edit_cents", (r) => r.abort("failed"));
+  await page.goto(url("p-plain"));
+  await page.waitForSelector("#app:not([hidden])");
+  for (const n of [1, 2, 3, 4]) await page.click(`.g-cell:nth-child(${n}) .g-pick`);
+  ok(/max/.test(await text(page, ".g-toast")) && (await page.locator(".g-cell.xtra").count()) === 0, "without a price, a 4th pick is just blocked");
+  await page.unroute("**/rest/v1/rpc/bk_extra_edit_cents");
+
+  /* --- picks sent, add extras from the sent set --- */
+  await page.goto(url("p-editing2"));
+  await page.waitForSelector("#app:not([hidden])");
+  await page.click(".g-selbar .g-addx");
+  ok((await text(page, ".g-h")) === "Add extra edits" && (await page.locator(".g-cell").count()) === 15, "chooser shows only the 15 photos that aren't picks");
+  await page.click(".g-xcancel");
+  ok((await text(page, ".g-h")) === "Your picks" && (await page.locator(".g-cell").count()) === 3, "Cancel goes back to the picks, nothing added");
+  await page.click(".g-selbar .g-addx");
+  await page.click(".g-cell:nth-child(2) .g-pick");
+  await page.click(".g-cell:nth-child(5) .g-pick");
+  ok((await text(page, ".g-count")) === "2 extra edits · $70", "chooser total");
+  await page.click(".g-submit");
+  ok(/Add 2 extra edits for \$70\?/.test(await text(page, ".g-confirm")), "chooser confirm");
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/extras-chooser-1536.png` });
+  await page.click(".g-send");
+  await page.waitForFunction(() => document.querySelector("#headline").textContent === "Lock in your extra edits.");
+  ok((await text(page, ".g-h")) === "Your picks" && (await page.locator(".g-cell").count()) === 5 && (await text(page, ".g-sent")) === "Picks sent · 5 chosen", "back to picks with the 2 extras in");
+  ok((await text(page, "#heroCta .btn")).includes("Pay $70.00"), "hero asks for $70");
+
+  /* --- delivered, add extras from "Your original selections" --- */
+  await page.goto(url("p-ready2"));
+  await page.waitForSelector("#app:not([hidden])");
+  ok(/Extra edits are \$35 each/.test(await text(page, ".g-more")), "delivered page offers extra edits under the selections");
+  await page.click(".g-more .g-addx");
+  await page.click(".g-cell:nth-child(1) .g-pick");
+  await page.click(".g-submit");
+  await page.click(".g-send");
+  await page.waitForSelector(".g-orig");
+  await page.waitForFunction(() => /Pay \$35\.00/.test(document.querySelector("#heroCta").textContent));
+  ok((await text(page, "#headline")) === "Your photos are ready." && (await text(page, "#heroCta .btn-gold")).includes("Download all 3 photos"), "download stays the main action");
+  ok((await text(page, ".hero-pay")) === "Pay $35.00 · Extra edits" && (await text(page, ".g-orig-text small")) === "Headshots — Oct 12 · 4 selected", "a second Pay button under Download; selections now 4");
+  await page.evaluate(() => scrollTo(0, 0));
+  await page.waitForTimeout(3200); // let the toast clear
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/ready-extras-1536.png` });
+  await page.setViewportSize({ width: 390, height: 844 });
+  ok((await overflow(page)) <= 0, "phone: delivered page with extras owed has no sideways scroll");
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/ready-extras-390-full.png`, fullPage: true });
+  await page.click(".g-more .g-addx");
+  await page.click(".g-cell:nth-child(2) .g-pick");
+  ok((await overflow(page)) <= 0 && await page.locator(".g-selbar.live").isVisible(), "phone: chooser fits, its bar is on screen");
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/extras-chooser-390.png` });
+  await page.click(".g-xcancel");
+  await page.setViewportSize({ width: 1536, height: 1024 });
 
   /* --- editing (sent, no edits yet) --- */
   await page.goto(url("p-editing"));

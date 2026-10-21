@@ -463,7 +463,7 @@ function galleriesCard(p) {
     const body = sel ? `
         <div class="ga-picks">
           <div class="ga-picks-head"><span class="hud">Client picks</span><b>${sel}</b></div>
-          <ol class="ga-names">${picks.map((it) => `<li>${esc(pickName(it))}</li>`).join("")}</ol>
+          <ol class="ga-names">${picks.map((it) => `<li>${esc(pickName(it))}${it.extra ? ` <span class="ga-x">extra</span>` : ""}</li>`).join("")}</ol>
           <div class="ga-pgrid">${picks.map((it) => `
             <figure class="ga-pick" data-path="${esc(it.storage_path)}" title="Open full size">
               <img alt="${esc(pickName(it))}" data-ph>

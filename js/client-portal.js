@@ -70,6 +70,16 @@ const processing = (inv) => inv.status === "sent" && JUST_PAID && inv.id === ses
 const unpaid = () => (data.invoices || []).filter((i) => i.status === "sent" && !processing(i))
   .sort((a, b) => (a.due_date || "9").localeCompare(b.due_date || "9"));
 const safeUrl = (u) => /^https:\/\//i.test(u || "");
+// the client's own "Extra edits" invoice (bk_portal_request_extras)
+const isExtras = (inv) => inv.kind === "custom" && inv.title === "Extra edits";
+
+// extra edits past the included picks: one request, then the invoice shows up to pay
+async function requestExtras(galleryId, ids) {
+  const r = await BK.rpc("bk_portal_request_extras", { p_project: PID, p_token: TOKEN, p_gallery: galleryId, p_items: ids });
+  if (!r || r.ok !== true) throw new Error("request_failed");
+  await refresh();
+  return r;
+}
 
 init();
 async function init() {
@@ -79,8 +89,11 @@ async function init() {
     if (media) { media.openProof = false; media.picksSent = true; media.proof = null; }
     renderHero();
   });
+  // the per-photo price comes from the studio's settings; no price, no extras offer
+  const cents = BK.rpc("bk_extra_edit_cents").then(Number).catch(() => 0);
   const mounting = window.BKGallery
-    ? BKGallery.mount(root, { mode: "token", project_id: PID, token: TOKEN }, { v2: true, displayName, emptyHTML: emptyPhotos }).catch(() => null)
+    ? cents.then((c) => BKGallery.mount(root, { mode: "token", project_id: PID, token: TOKEN },
+        { v2: true, displayName, emptyHTML: emptyPhotos, extras: c > 0 ? { cents: c, request: requestExtras } : null })).catch(() => null)
     : Promise.resolve(null);
   try {
     data = await BK.rpc("bk_portal", { p_project: PID, p_token: TOKEN });
@@ -181,6 +194,9 @@ function renderHero() {
     } else {
       cta = heroButton("arrow-down", vids === 1 ? "Watch your video" : "Watch your videos", plural(vids, "video"), 'data-act="video"');
     }
+    // anything still owed (extra edits, a balance) sits right under the download, never hidden in a tab
+    const due = unpaid()[0];
+    if (due) cta += `<button class="btn btn-line hero-pay" type="button" data-pay="${esc(due.id)}">${icon("card")}<span class="label">Pay ${money(due.amount_cents)} · ${esc(due.title)}</span></button>`;
   } else if (st === "picking") {
     h = "Pick your favorites.";
     const pr = media.proof;
@@ -191,7 +207,8 @@ function renderHero() {
     cta = heroButton("pen", "Review and sign", c.title, 'data-act="sign"');
   } else if (st === "pay") {
     const inv = unpaid()[0];
-    h = inv.kind === "deposit" && !shootPassed(p) ? "Lock in your date."
+    h = isExtras(inv) ? "Lock in your extra edits."
+      : inv.kind === "deposit" && !shootPassed(p) ? "Lock in your date."
       : ["new", "quoted"].includes(p.status) ? "Your quote is ready." : "Your invoice is ready.";
     cta = heroButton("card", `Pay ${money(inv.amount_cents)}`, `${inv.title}${inv.due_date ? ` · Due ${shortDate(inv.due_date)}` : ""}`, `data-pay="${esc(inv.id)}"`);
   } else if (st === "editing") {
@@ -322,7 +339,7 @@ function renderInvoices() {
   const paying = sessionStorage.getItem("bk_paying");
   box.innerHTML = inv.length ? inv.map((i) => {
     if (i.status === "paid" && i.id === paying) sessionStorage.removeItem("bk_paying");
-    const lines = (i.line_items || []).map((li) => esc(li.label)).join(" · ") || (i.kind === "deposit" ? "Booking deposit" : "");
+    const lines = (i.line_items || []).map((li) => esc(li.title || li.label)).filter(Boolean).join(" · ") || (i.kind === "deposit" ? "Booking deposit" : "");
     return `<div class="inv">
       ${icon("card", "fact-ico")}
       <div class="inv-main">
@@ -425,7 +442,9 @@ function renderMessages() {
 function paidBanner() {
   if (!JUST_PAID) return;
   const inv = (data.invoices || []).find((i) => i.id === sessionStorage.getItem("bk_paying"));
-  $("#paidText").textContent = inv && inv.kind === "deposit"
+  $("#paidText").textContent = inv && isExtras(inv)
+    ? "Payment received. Your extra edits are locked in, and your receipt is on its way to your email."
+    : inv && inv.kind === "deposit"
     ? "Payment received. Your date is locked in, and your receipt is on its way to your email."
     : "Payment received. Thank you! Your receipt is on its way to your email.";
   $("#paidBanner").hidden = false;

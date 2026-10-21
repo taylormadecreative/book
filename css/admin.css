@@ -753,3 +753,6 @@ body::after { display: none; }
   .msg { max-width: 90%; }
   .achat { height: 420px; }
 }
+
+/* a paid extra edit the client added past the included picks (portal, 2026-10-21) */
+.ga-x { margin-left: 0.4em; padding: 0.05em 0.5em; border-radius: 999px; background: #f6ead0; color: var(--gold-ink); font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; }

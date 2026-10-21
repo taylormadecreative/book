@@ -280,6 +280,7 @@ ol, ul { padding: 0; list-style: none; }
 .hero-cta.is-aside { align-items: flex-end; }
 .hero-aside { max-width: 34ch; color: var(--on-ink-muted); font-size: 1.05rem; line-height: 1.45; text-align: right; }
 .hero-note { color: var(--on-ink-muted); font-size: 0.95rem; text-align: center; max-width: 34ch; }
+.hero-pay { min-width: 340px; max-width: 100%; white-space: normal; margin-top: 0.2rem; }
 .hero-when { display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem; text-align: right; }
 .hero-when .eyebrow { font-size: 0.78rem; }
 .hero-when strong { font-size: clamp(1.25rem, 2vw, 1.7rem); font-weight: 600; }
@@ -465,7 +466,20 @@ ol, ul { padding: 0; list-style: none; }
 .g-open:focus-visible { outline-offset: -3px; }
 .g-cell img { width: 100%; height: 100%; object-fit: cover; transition: transform 400ms var(--ease); }
 @media (hover: hover) and (pointer: fine) { .g-cell:not(.final):hover img { transform: scale(1.03); } }
-.g-cell.sel { box-shadow: 0 0 0 3px var(--gold); }
+.g-cell.sel, .g-cell.xtra { box-shadow: 0 0 0 3px var(--gold); }
+/* an extra edit (paid, past the included picks) wears a tag so it never reads as included */
+.g-cell.xtra::after {
+  content: "Extra";
+  position: absolute;
+  left: 8px; bottom: 8px;
+  padding: 0.15em 0.6em;
+  border-radius: 999px;
+  background: var(--gold);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+  pointer-events: none;
+}
 
 .g-pick { position: absolute; top: 0; right: 0; width: 48px; height: 48px; padding: 0; border: 0; background: none; display: grid; place-items: center; }
 .g-pick span {
@@ -481,7 +495,7 @@ ol, ul { padding: 0; list-style: none; }
 .g-pick .ico { width: 18px; height: 18px; stroke-width: 2.4; }
 .g-pick:active span { transform: scale(0.9); }
 .g-pick:focus-visible { outline-offset: -6px; }
-.g-cell.sel .g-pick span { background: var(--gold); border-color: var(--gold); color: var(--ink); }
+.g-cell.sel .g-pick span, .g-cell.xtra .g-pick span { background: var(--gold); border-color: var(--gold); color: var(--ink); }
 
 /* finals: a card per photo, name + Download underneath */
 .g-cell.final {
@@ -557,6 +571,19 @@ ol, ul { padding: 0; list-style: none; }
 .g-orig-text { flex: 1 1 auto; min-width: 0; }
 .g-orig-text b { display: block; font-size: 1.15rem; font-weight: 700; }
 .g-orig-text small { display: block; color: var(--paper-muted); font-size: 1rem; }
+.g-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  margin-top: 10px;
+  padding: 0.7rem 0.8rem 0.7rem 1.3rem;
+  border: 1px dashed var(--paper-edge);
+  border-radius: var(--radius);
+  color: var(--paper-muted);
+}
+.g-selbar .g-addx { margin-left: auto; }
 .g-orig-cta { display: inline-flex; align-items: center; gap: 0.6rem; font-size: 1rem; font-weight: 500; color: var(--paper-ink); white-space: nowrap; }
 
 /* All / Picked */
@@ -833,7 +860,7 @@ ol, ul { padding: 0; list-style: none; }
   .cbar-right { gap: 0.5rem; }
   .hero-grid { grid-template-columns: minmax(0, 1fr); }
   .hero-cta { align-items: stretch; padding-bottom: 0; margin-top: 0.6rem; }
-  .hero-cta .btn-xl { min-width: 0; width: 100%; }
+  .hero-cta .btn-xl, .hero-pay { min-width: 0; width: 100%; }
   .hero-when { align-items: flex-start; text-align: left; }
   .hero-cta.is-aside { align-items: flex-start; }
   .hero-aside { text-align: left; max-width: 52ch; }
@@ -896,6 +923,9 @@ ol, ul { padding: 0; list-style: none; }
   .g-orig-thumbs img { width: 52px; height: 52px; }
   .g-orig-text { flex: 1 1 160px; }
   .g-orig-cta { width: 100%; justify-content: space-between; padding-top: 0.75rem; border-top: 1px solid var(--paper-line); }
+  .g-more { padding: 0.8rem 1rem; }
+  .g-more .btn { width: 100%; }
+  .g-selbar .g-addx { margin-left: 0; width: 100%; }
   .g-selbar.live { border-radius: 18px; padding: 0.75rem; }
   .g-selbar.live .g-actions { width: 100%; }
   .g-selbar.live .g-actions .btn { flex: 1 1 auto; }
