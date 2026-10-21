@@ -536,17 +536,19 @@ async function hydrateThumbs() {
   });
 }
 
-// 480px-wide JPEG for the client + admin grids; null if the browser can't decode the file
-async function makeThumb(file) {
+// preview JPEG for the client + admin grids; null if the browser can't decode the file.
+// Proofs: 480px wide (hundreds per set). Finals: 1620px on the long edge, because the client
+// portal shows each edit as a big card and opens it in the viewer from the same file.
+async function makeThumb(file, final) {
   try {
     const bmp = await createImageBitmap(file);
-    const scale = Math.min(1, 480 / bmp.width);
+    const scale = final ? Math.min(1, 1620 / Math.max(bmp.width, bmp.height)) : Math.min(1, 480 / bmp.width);
     const c = document.createElement("canvas");
     c.width = Math.round(bmp.width * scale);
     c.height = Math.round(bmp.height * scale);
     c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
     bmp.close?.();
-    return await new Promise((res) => c.toBlob(res, "image/jpeg", 0.74));
+    return await new Promise((res) => c.toBlob(res, "image/jpeg", final ? 0.82 : 0.74));
   } catch (_) {
     return null;
   }
@@ -581,7 +583,7 @@ async function uploadToGallery(p, galleryId, files) {
     });
     if (up.error) { failed++; done++; show(); continue; }
     if (gal?.kind !== "video" && /^image\//.test(file.type)) {
-      const thumb = await makeThumb(file);
+      const thumb = await makeThumb(file, gal?.kind === "final");
       // a missing thumb is fine: the grids fall back to the full image
       if (thumb) await sb.storage.from("project-media").upload(thumbPath(key), thumb, { contentType: "image/jpeg", upsert: true });
     }
