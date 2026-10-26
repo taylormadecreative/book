@@ -1,4 +1,4 @@
-// Stubbed UI test for /inbox/. Serves the repo locally; every Supabase call is intercepted — never touches prod.
+// Stubbed UI test for the previous Inbox look (/inbox/v1.html, the ?look=v1 fallback). Serves the repo locally; every Supabase call is intercepted — never touches prod.
 // Run: node tests/inbox.e2e.mjs
 import { chromium } from "/Users/nelsontaylor/.cache/pglite-rig/node_modules/playwright/index.mjs";
 import { spawn } from "node:child_process";
@@ -46,7 +46,7 @@ await ctx.route("**/pgqdmnmessbbzyszjfvr.supabase.co/**", async (route) => {
 const page = await ctx.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
-await page.goto("http://localhost:18731/inbox/");
+await page.goto("http://localhost:18731/inbox/v1.html");
 // first list load fails → a Try again button, not a dead screen
 await page.waitForSelector("#list button.retry", { timeout: 8000 }).catch(() => fail("no Try again after a failed load"));
 await page.click("#list button.retry");

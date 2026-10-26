@@ -1,12 +1,14 @@
 /* Taylormade — Inbox app: alerts + replies pre-filled from real booking data. Spec: docs/superpowers/specs/2026-09-23-inbox-app-design.md */
 import { esc, fmtWhen, fmtDay, smsHref, telHref, pushSupport, newKey, urlB64ToUint8Array, listRowHtml, whatLabel } from "./inbox-view.js";
-import { buildDraft, draftOptions } from "./inbox-drafts.js";
-import { initPitches } from "./inbox-pitches.js";
+import { buildDraft, draftOptions } from "./inbox-drafts.js?v=2";
+import { initPitches } from "./inbox-pitches.js?v=2";
 
 const sb = window.supabase.createClient(window.BK.SUPABASE_URL, window.BK.SUPABASE_KEY);
 const $ = (s) => document.querySelector(s);
 const state = { filter: "needs", rows: [], item: null, slots: [], key: newKey(), sending: false, sendTimer: null, pendingText: false, poll: null };
 const SEND_DELAY_MS = 5000;
+// "/inbox/" normally; "/inbox/v1.html" when this older look is opened as the fallback
+const HOME = location.pathname.endsWith("/v1.html") ? location.pathname : "/inbox/";
 
 function toast(msg) {
   const t = $("#toast"); t.textContent = msg; t.classList.add("show");
@@ -37,7 +39,7 @@ async function rpc(fn, args, retried = false) {
   }
   return data;
 }
-const pitches = initPitches({ sb, rpc, show, toast, $ });
+const pitches = initPitches({ sb, rpc, show, toast, $, home: HOME });
 
 /* ---------- auth ---------- */
 $("#loginForm").addEventListener("submit", async (e) => {
@@ -49,10 +51,10 @@ $("#loginForm").addEventListener("submit", async (e) => {
   route();
 });
 $("#googleBtn").addEventListener("click", async () => {
-  const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + "/inbox/" + location.search } });
+  const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + HOME + location.search } });
   if (error) $("#loginErr").textContent = error.message || "Could not start Google sign-in.";
 });
-$("#logoutBtn").addEventListener("click", async () => { await sb.auth.signOut(); location.replace("/inbox/"); });
+$("#logoutBtn").addEventListener("click", async () => { await sb.auth.signOut(); location.replace(HOME); });
 
 /* ---------- routing ---------- */
 async function route() {
@@ -186,7 +188,7 @@ function setDraft(text) {
   saveDraft();
 }
 $("#draft").addEventListener("input", () => { $("#draft").dataset.dirty = "1"; setDraft($("#draft").value); });
-$("#backBtn").addEventListener("click", () => { cancelSend(); history.pushState({}, "", "/inbox/"); openList(); });
+$("#backBtn").addEventListener("click", () => { cancelSend(); history.pushState({}, "", HOME); openList(); });
 
 // Send holds for 5 seconds with an Undo, so a stray tap never emails a client
 $("#sendBtn").addEventListener("click", () => {
@@ -212,7 +214,7 @@ async function doSend(body) {
     await rpc("bk_inbox_send", { p_project: state.item.project.id, p_body: body, p_key: state.key });
     clearDraft(state.item.project.id);
     toast(`Sent to ${state.item.project.client_email}`);
-    history.pushState({}, "", "/inbox/"); await openList();
+    history.pushState({}, "", HOME); await openList();
   } catch (e) {
     $("#draftErr").textContent = e.message || "Couldn't send. Your reply is still here, so try again.";
   } finally { state.sending = false; btn.disabled = false; btn.textContent = "Send email"; $("#draft").readOnly = false; }
@@ -226,7 +228,7 @@ async function mark(handled) {
   try {
     await rpc("bk_inbox_mark", { p_project: state.item.project.id, p_handled: handled });
     toast(handled ? "Marked handled" : "Marked unread");
-    history.pushState({}, "", "/inbox/"); await openList();
+    history.pushState({}, "", HOME); await openList();
   } catch (_) { toast("Couldn't update. Try again."); }
 }
 

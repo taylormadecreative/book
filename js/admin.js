@@ -79,7 +79,22 @@ async function boot() {
   }
   renderFilters();
   await load();
+  openFromLink();
   state.poll = setInterval(() => { if (!document.hidden) load(); }, 15000);
+}
+// the Inbox's "Open in Studio" lands here as admin.html?p=<project id>
+function openFromLink() {
+  const id = new URLSearchParams(location.search).get("p");
+  const p = id && state.projects.find((x) => x.id === id);
+  if (!p) return;
+  if (!visibleProjects().some((x) => x.id === id)) { state.filter = "all"; renderFilters(); }
+  state.sel = id;
+  renderList();
+  renderDetail(p);
+  markRead(p);
+  $(`.prow[data-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
+  // stacked layout: the project renders below the pipeline, so go to it (same as a row click)
+  if (window.matchMedia("(max-width: 960px)").matches) $("#dpane").scrollIntoView({ block: "start" });
 }
 
 /* ---------------- data ---------------- */

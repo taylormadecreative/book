@@ -15,7 +15,16 @@ function longWhen(iso) {
 function monthDay(date) {
   return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long", day: "numeric" }).format(new Date(date + "T12:00:00Z"));
 }
-function firstName(item) { return item.project.client_name.trim().split(/\s+/)[0] || "there"; }
+// "Jasmine Reed" → "Jasmine"; "Dr. Melva K. Wallace" → "Dr. Wallace" (never "Hi Dr.,")
+export function greetName(name) {
+  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+  const title = words[0] && /^(dr|mr|mrs|ms|mx|prof)\.?$/i.test(words[0]) ? words.shift() : null;
+  while (words.length > 1 && /^(jr|sr|ii|iii|iv|phd|md)\.?,?$/i.test(words[words.length - 1].replace(/,$/, ""))) words.pop();
+  if (!words.length) return title || "there";
+  if (title) return `${title.replace(/\.?$/, ".").replace(/^./, (c) => c.toUpperCase())} ${words[words.length - 1].replace(/,$/, "")}`;
+  return words[0];
+}
+function firstName(item) { return greetName(item.project.client_name); }
 function what(item) {
   const t = item.project.title;
   return (t && t.includes(" — ") ? t.split(" — ").slice(1).join(" — ") : "") || SERVICE[item.project.service] || "Project";
@@ -62,6 +71,10 @@ export function buildDraft(item, slots, kind) {
       if (booked(item)) kind = "confirm";
       else return wrap(first, "Thank you, your payment came through. I'll follow up shortly with next steps.");
     } else kind = "blank";
+  }
+  if (kind === "call" && item.messages.some((m) => m.sender === "studio")) {
+    // they already heard the first-contact pitch; this is a follow-up, not an introduction
+    return wrap(first, "Easier to talk this through by phone. Could we hop on a quick call? What days and times work best for you?");
   }
   if (kind === "call") {
     const onDate = p.event_date ? ` on ${monthDay(p.event_date)}` : "";

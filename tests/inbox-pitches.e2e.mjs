@@ -71,8 +71,9 @@ const sideways = () => page.evaluate(() => document.documentElement.scrollWidth 
 
 // list
 await page.goto(`${BASE}/inbox/`);
-await page.waitForSelector("#pitchesNav", { timeout: 8000 }).catch(() => fail("no Pitches chip in the inbox"));
-await page.click("#pitchesNav");
+// the top bar has Pitches on wider screens; phones get the Pitches pill at the end of the filters
+await page.waitForSelector("#pitchesNav:visible, .lf-pitches:visible", { timeout: 8000 }).catch(() => fail("no Pitches link in the inbox"));
+await page.click((await page.isVisible("#pitchesNav")) ? "#pitchesNav" : ".lf-pitches");
 await page.waitForSelector("a.pt-row", { timeout: 8000 }).catch(() => fail("pitches list never rendered"));
 if (!page.url().includes("view=pitches")) await fail("URL is not ?view=pitches");
 if (await page.evaluate(() => window.pwned)) await fail("org name ran as HTML in the list");
@@ -196,7 +197,7 @@ await page.waitForSelector("a.pt-row", { timeout: 8000 }).catch(() => fail("did 
 
 // back to the regular inbox
 await page.click("#ptInboxBtn");
-await page.waitForSelector("#listView:not([hidden])", { timeout: 8000 }).catch(() => fail("‹ Inbox did not go back"));
+await page.waitForSelector("#crmView:not([hidden])", { timeout: 8000 }).catch(() => fail("‹ Inbox did not go back"));
 
 if (errors.length) await fail("page errors: " + errors.join(" | "));
 await browser.close(); srv.kill();

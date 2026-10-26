@@ -7,7 +7,7 @@ import { OFFER, LANE, STATUS, SKIP_REASONS, hashInput, sha256Hex, safeHref, igHr
 const UNDO_DELAY_MS = 5000;
 const KEYS = [["email", "First email"], ["fu1", "Follow-up 1"], ["fu2", "Follow-up 2"]];
 
-export function initPitches({ sb, rpc, show, toast, $ }) {
+export function initPitches({ sb, rpc, show, toast, $, home = "/inbox/" }) {
   const st = { filter: "review", item: null, hashOk: false, timer: null, tick: null, seq: 0 };
   const toList = async () => { history.pushState({}, "", "?view=pitches"); await openPitches(); };
 
@@ -32,7 +32,7 @@ export function initPitches({ sb, rpc, show, toast, $ }) {
     e.preventDefault(); history.pushState({}, "", `?pitch=${a.dataset.pitch}`); openPitch(a.dataset.pitch);
   });
   $("#ptBack").addEventListener("click", toList);
-  $("#ptInboxBtn").addEventListener("click", () => { history.pushState({}, "", "/inbox/"); window.dispatchEvent(new PopStateEvent("popstate")); });
+  $("#ptInboxBtn").addEventListener("click", () => { history.pushState({}, "", home); window.dispatchEvent(new PopStateEvent("popstate")); });
 
   async function openPitch(id) {
     cancelPending(); show("#pitchView");

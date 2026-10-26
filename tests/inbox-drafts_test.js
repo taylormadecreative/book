@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
-import { buildDraft, draftOptions, situation } from "../js/inbox-drafts.js";
+import { buildDraft, draftOptions, situation, greetName } from "../js/inbox-drafts.js";
 
 const project = { id: "p1", client_name: "Jasmine Reed", client_email: "j@x.com", client_phone: null, company: null,
   service: "brand_content", title: "Jasmine Reed — Brand Content", event_date: "2026-10-12", event_time: null,
@@ -85,4 +85,25 @@ Deno.test("an 'other' service reads as 'your project'", () => {
 Deno.test("a title ending in 'Other' still reads as 'your project'", () => {
   const d = buildDraft({ ...inquiry, project: { ...project, service: "other", title: "Dee — Other", event_date: null } }, [], "call");
   assertStringIncludes(d, "reaching out about your project.");
+});
+
+Deno.test("greeting never stops at a title", () => {
+  assertEquals(greetName("Jasmine Reed"), "Jasmine");
+  assertEquals(greetName("Dr. Melva K. Wallace"), "Dr. Wallace");
+  assertEquals(greetName("dr Alana Price"), "Dr. Price");
+  assertEquals(greetName("Ms. Kim"), "Ms. Kim");
+  assertEquals(greetName("Dr."), "Dr.");
+  assertEquals(greetName("Farida"), "Farida");
+  assertEquals(greetName("Marcus Bell Jr."), "Marcus");
+  assertEquals(greetName("Dr. Ray Allen Jr."), "Dr. Allen");
+  const dr = { ...inquiry, project: { ...project, client_name: "Dr. Melva K. Wallace" } };
+  assert(buildDraft(dr, [], "suggested").startsWith("Hi Dr. Wallace,\n"));
+});
+
+Deno.test("a call offer after he already replied is a follow-up, not the first pitch", () => {
+  const replied = { ...inquiry, alerts: [], messages: [{ sender: "studio", body: "Hi", created_at: "2026-09-23T16:00:00Z" }, { sender: "client", body: "Can we move it?", created_at: "2026-09-24T10:00:00Z" }] };
+  const d = buildDraft(replied, [], "call");
+  assertStringIncludes(d, "quick call");
+  assert(!d.includes("Thanks so much for reaching out"));
+  assert(buildDraft(inquiry, [], "call").includes("Thanks so much for reaching out"));
 });

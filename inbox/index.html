@@ -4,82 +4,142 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="robots" content="noindex">
-  <meta name="theme-color" content="#08080a">
+  <meta name="theme-color" content="#0b0b0d">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Inbox">
-  <title>Taylormade Inbox</title>
+  <title>Inbox · Taylormade Creative</title>
   <link rel="manifest" href="/inbox/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/assets/img/inbox-apple-180.png">
   <link rel="icon" href="/assets/img/inbox-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800&family=Familjen+Grotesk:wght@400;500;600;700&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/base.css">
-  <link rel="stylesheet" href="/css/inbox.css">
+  <link rel="stylesheet" href="/css/inbox.css?v=2">
+  <link rel="stylesheet" href="/css/inbox-crm.css?v=1">
+  <script>if (new URLSearchParams(location.search).get("look") === "v1") location.replace("/inbox/v1.html");</script>
 </head>
 <body>
   <!-- sign in -->
-  <main class="ib-login" id="loginView" hidden>
-    <span class="hud"><span class="tick">●</span> STUDIO INBOX</span>
-    <h1>Taylormade<span class="gold">/</span>Inbox</h1>
+  <main class="crm-login" id="loginView" hidden>
+    <div class="crm-login-mark">
+      <span class="wordmark">TAYLORMADE<i>/</i>CREATIVE</span>
+      <span class="crm-tag">Inbox</span>
+    </div>
     <form id="loginForm">
       <label for="email">Email</label><input type="email" id="email" autocomplete="username" required>
       <label for="password">Password</label><input type="password" id="password" autocomplete="current-password" required>
       <button class="btn btn-gold" id="loginBtn" type="submit">Sign in</button>
     </form>
+    <div class="crm-login-or" aria-hidden="true"><span></span>or<span></span></div>
     <button class="btn btn-ghost" id="googleBtn" type="button">Continue with Google</button>
     <p class="ib-err" id="loginErr" role="alert"></p>
   </main>
 
-  <!-- list -->
-  <main class="ib-app" id="listView" hidden>
-    <header class="ib-bar">
-      <span class="ib-brand">INBOX</span>
-      <button class="ib-alerts" id="alertsBtn" type="button">Turn on alerts</button>
-    </header>
-    <p class="ib-note" id="alertsNote" hidden></p>
-    <nav class="ib-chips" aria-label="Filter">
-      <button type="button" class="chip on" data-filter="needs">Needs reply</button>
-      <button type="button" class="chip" data-filter="all">All</button>
-      <a class="chip" id="pitchesNav" href="?view=pitches">Pitches</a>
+  <!-- top bar: shared by the inbox and the pitches -->
+  <header class="crm-bar" id="topBar" hidden>
+    <a class="crm-brand" href="/inbox/" id="brandLink">
+      <span class="wordmark">TAYLORMADE<i>/</i>CREATIVE</span>
+      <span class="crm-tag">Inbox</span>
+    </a>
+    <div class="crm-stats" id="stats" aria-label="At a glance"></div>
+    <nav class="crm-nav" aria-label="Studio tools">
+      <a href="?view=pitches" id="pitchesNav" class="crm-nav-pitches">Pitches</a>
+      <a href="/admin.html" class="crm-nav-out" target="_blank" rel="noopener">Studio <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg></a>
+      <button type="button" class="crm-alerts" id="alertsBtn"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3a4.5 4.5 0 0 0-4.5 4.5c0 4-1.75 5.5-1.75 5.5h12.5S14.5 11.5 14.5 7.5A4.5 4.5 0 0 0 10 3Z"/><path d="M8.6 15.75a1.5 1.5 0 0 0 2.8 0"/></svg><span id="alertsLabel">Alerts</span></button>
+      <span class="crm-avatar" aria-hidden="true">NT</span>
     </nav>
-    <div id="list" class="ib-list" aria-live="polite"></div>
-    <button type="button" class="btn btn-ghost ib-more" id="moreBtn" hidden>Load more</button>
-    <footer class="ib-foot"><button type="button" class="linkish" id="logoutBtn">Sign out</button></footer>
-  </main>
+  </header>
 
-  <!-- detail -->
-  <main class="ib-app" id="detailView" hidden>
-    <header class="ib-bar">
-      <button type="button" class="ib-back" id="backBtn" aria-label="Back to inbox">‹ Inbox</button>
-      <button type="button" class="linkish" id="markBtn">Mark handled</button>
-    </header>
-    <section id="facts" class="ib-facts"></section>
-    <section class="ib-compose">
-      <div class="ib-compose-head">
-        <span class="hud">YOUR REPLY</span>
-        <span class="ib-count" id="count">0 / 4000</span>
+  <!-- the CRM: conversations · the work surface (thread + client & deal) -->
+  <div class="crm" id="crmView" hidden data-pane="list">
+    <aside class="lpane" aria-label="Conversations">
+      <div class="lpane-head">
+        <div class="lpane-title">
+          <h1>Inbox</h1>
+          <span class="lpane-count" id="listCount"></span>
+        </div>
+        <div class="lstats" id="statsMini" aria-label="At a glance"></div>
+        <p class="crm-note" id="alertsNote" role="status" hidden></p>
+        <label class="lsearch">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M13 13l4 4"/></svg>
+          <input type="search" id="search" placeholder="Search name, email, project" aria-label="Search conversations" autocomplete="off" spellcheck="false">
+          <kbd aria-hidden="true">/</kbd>
+        </label>
+        <div class="lfilters" id="filters" role="group" aria-label="Show"></div>
       </div>
-      <div class="ib-tpl" id="tpls" role="group" aria-label="Start from a template"></div>
-      <textarea id="draft" rows="9" maxlength="4000" aria-label="Your reply"></textarea>
-      <p class="ib-err" id="draftErr" role="alert"></p>
-      <div class="ib-actions">
-        <button type="button" class="btn btn-gold" id="sendBtn">Send email</button>
-        <button type="button" class="btn btn-ghost" id="undoSend" hidden>Undo</button>
-        <a class="btn btn-ghost" id="smsBtn" hidden>Text it</a>
-        <a class="btn btn-ghost" id="callBtn" hidden>Call</a>
+      <div class="llist" id="list" aria-busy="true"></div>
+      <footer class="lpane-foot">
+        <a href="/admin.html" target="_blank" rel="noopener">Studio <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg></a>
+        <a href="/schedule.html" target="_blank" rel="noopener">Schedule <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg></a>
+        <button type="button" class="linkish" id="logoutBtn">Sign out</button>
+      </footer>
+    </aside>
+
+    <section class="work" id="work" aria-label="Conversation">
+      <div class="work-empty" id="workEmpty">
+        <span class="work-empty-tag">Pick a conversation</span>
+        <p><kbd>↑</kbd> <kbd>↓</kbd> to move through the list · <kbd>/</kbd> to search</p>
       </div>
-      <div class="ib-sent-it" id="sentIt" hidden>
-        <span>Texted or talked to them?</span>
-        <button type="button" class="btn btn-gold" id="sentItYes">Mark handled</button>
-        <button type="button" class="linkish" id="sentItNo">Not yet</button>
+      <!-- phones: a slim bar that stays put while the thread scrolls -->
+      <div class="wbar" id="wbar" hidden>
+        <button type="button" class="wback" id="backBtn" aria-label="Back to inbox"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5"/></svg>Inbox</button>
+        <span class="wbar-name" id="wbarName" aria-hidden="true"></span>
+        <button type="button" class="btn btn-ghost btn-sm js-mark" id="markBtnPhone">Mark handled</button>
+      </div>
+      <header class="whead" id="whead" hidden>
+        <div class="whead-id">
+          <p class="crumb" id="crumb"></p>
+          <h2 id="wname" tabindex="-1"></h2>
+          <p class="wsub" id="wsub"></p>
+        </div>
+        <div class="whead-acts">
+          <span class="wstage" id="wstage"></span>
+          <button type="button" class="btn btn-ghost btn-sm js-mark" id="markBtn">Mark handled</button>
+          <a class="btn btn-ink btn-sm" id="studioBtn" target="_blank" rel="noopener">Open in Studio <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg></a>
+        </div>
+        <div class="wtabs" role="tablist" aria-label="Conversation view">
+          <button type="button" role="tab" id="tabThread" aria-selected="true" aria-controls="conv" data-tab="thread">Messages</button>
+          <button type="button" role="tab" id="tabSide" aria-selected="false" aria-controls="side" data-tab="side">Client &amp; deal</button>
+        </div>
+      </header>
+
+      <div class="wbody" id="wbody" hidden data-tab="thread">
+        <div class="conv" id="conv" role="tabpanel" aria-labelledby="tabThread">
+          <div class="thread" id="thread"></div>
+
+          <section class="composer" id="composer" aria-label="Your reply">
+            <div class="ib-sent-it crm-sent-it" id="sentIt" hidden>
+              <span>Texted or talked to them?</span>
+              <button type="button" class="btn btn-gold btn-sm" id="sentItYes">Mark handled</button>
+              <button type="button" class="linkish" id="sentItNo">Not yet</button>
+            </div>
+            <div class="composer-head">
+              <span class="composer-label" id="replyLabel">Reply</span>
+              <div class="tpls" id="tpls" role="group" aria-label="Start from a template"></div>
+            </div>
+            <textarea id="draft" rows="7" maxlength="4000" aria-label="Your reply"></textarea>
+            <p class="ib-err" id="draftErr" role="alert"></p>
+            <div class="composer-foot">
+              <span class="composer-count" id="count">0 / 4000</span>
+              <div class="composer-acts">
+                <a class="btn btn-ghost btn-sm" id="callBtn" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.6 3.5H4.5a1 1 0 0 0-1 1.1 12.5 12.5 0 0 0 11.9 11.9 1 1 0 0 0 1.1-1v-2.1a1 1 0 0 0-.8-1l-2.4-.5a1 1 0 0 0-1 .4l-.7 1a9 9 0 0 1-4-4l1-.7a1 1 0 0 0 .4-1l-.5-2.4a1 1 0 0 0-1-.8Z"/></svg><span class="lbl">Call</span></a>
+                <a class="btn btn-ghost btn-sm" id="smsBtn" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4.5h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H9l-3.5 3v-3H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Z"/></svg><span class="lbl">Text it</span></a>
+                <button type="button" class="btn btn-ghost btn-sm" id="undoSend" hidden>Undo</button>
+                <button type="button" class="btn btn-gold" id="sendBtn"><span id="sendLabel">Send email</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12M11 5l5 5-5 5"/></svg></button>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <aside class="side" id="side" role="tabpanel" aria-labelledby="tabSide"></aside>
       </div>
     </section>
-  </main>
+  </div>
 
   <!-- pitches list -->
-  <main class="ib-app" id="pitchesView" hidden>
+  <main class="ib-app crm-pitches" id="pitchesView" hidden>
     <header class="ib-bar">
       <button type="button" class="ib-back" id="ptInboxBtn" aria-label="Back to inbox">‹ Inbox</button>
       <span class="ib-brand">PITCHES</span>
@@ -93,7 +153,7 @@
   </main>
 
   <!-- one pitch -->
-  <main class="ib-app" id="pitchView" hidden>
+  <main class="ib-app crm-pitches" id="pitchView" hidden>
     <header class="ib-bar">
       <button type="button" class="ib-back" id="ptBack" aria-label="Back to pitches">‹ Pitches</button>
       <span class="pt-status" id="ptStatus"></span>
@@ -117,7 +177,7 @@
   </main>
 
   <!-- edit a pitch -->
-  <main class="ib-app" id="pitchEditView" hidden>
+  <main class="ib-app crm-pitches" id="pitchEditView" hidden>
     <header class="ib-bar">
       <button type="button" class="ib-back" id="peCancel">‹ Cancel</button>
       <span class="ib-brand" id="peTitle">Edit</span>
@@ -127,10 +187,13 @@
     <div class="ib-actions"><button type="button" class="btn btn-gold" id="peSave">Save &amp; re-render</button></div>
   </main>
 
-  <div class="ib-toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="ib-toast crm-toast" id="toast" role="status" aria-live="polite"></div>
+  <!-- a reply still counting down while he looks at something else -->
+  <div class="undo-bar" id="undoBar" role="status" hidden><span id="undoBarText"></span><button type="button" id="undoBarBtn">Undo</button></div>
+  <p class="sr-only" id="srStatus" aria-live="polite"></p>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="/js/config.js"></script>
-  <script type="module" src="/js/inbox.js"></script>
+  <script type="module" src="/js/inbox-crm.js?v=1"></script>
 </body>
 </html>
