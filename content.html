@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0b0b0d">
+  <title>Content · Taylormade Creative</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 fill=%27%2308080a%27/%3E%3Cpath d=%27M5 12V5h7M20 5h7v7M27 20v7h-7M12 27H5v-7%27 stroke=%27%23e9b949%27 stroke-width=%273%27 fill=%27none%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%274%27 fill=%27%23e9b949%27/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/inbox-crm.css?v=1">
+  <link rel="stylesheet" href="/css/content.css?v=2">
+</head>
+<body>
+  <!-- sign in -->
+  <main class="crm-login" id="loginView" hidden>
+    <div class="crm-login-mark">
+      <span class="wordmark">TAYLORMADE<i>/</i>CREATIVE</span>
+      <span class="crm-tag">Content</span>
+    </div>
+    <form id="loginForm">
+      <label for="email">Email</label><input type="email" id="email" autocomplete="username" required>
+      <label for="password">Password</label><input type="password" id="password" autocomplete="current-password" required>
+      <button class="btn btn-gold" id="loginBtn" type="submit">Sign in</button>
+    </form>
+    <div class="crm-login-or" aria-hidden="true"><span></span>or<span></span></div>
+    <button class="btn btn-ghost" id="googleBtn" type="button">Continue with Google</button>
+    <p class="cc-err" id="loginErr" role="alert"></p>
+  </main>
+
+  <header class="crm-bar" id="topBar" hidden>
+    <a class="crm-brand" href="/content.html">
+      <span class="wordmark">TAYLORMADE<i>/</i>CREATIVE</span>
+      <span class="crm-tag">Content</span>
+    </a>
+    <div class="crm-stats" id="stats" aria-label="At a glance"></div>
+    <nav class="crm-nav" aria-label="Studio tools">
+      <a href="/inbox/">Inbox <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg></a>
+      <a href="/admin.html">Studio <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg></a>
+      <span class="crm-avatar" id="avatar" aria-hidden="true">NT</span>
+    </nav>
+  </header>
+
+  <!-- the calendar: the days · the post you're working on -->
+  <div class="crm cc" id="calView" hidden data-pane="list">
+    <aside class="lpane" aria-label="Posts by day">
+      <div class="lpane-head">
+        <div class="lpane-title">
+          <h1>Content</h1>
+          <span class="lpane-count" id="runLabel"></span>
+        </div>
+        <div class="lstats" id="statsMini" aria-label="At a glance"></div>
+        <div class="lfilters" id="filters" role="group" aria-label="Show"></div>
+      </div>
+      <div class="llist" id="list" aria-busy="true"></div>
+      <footer class="lpane-foot">
+        <a href="/inbox/">Inbox <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg></a>
+        <a href="/admin.html">Studio <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11l6-6M6 5h5v5"/></svg></a>
+        <button type="button" class="linkish" id="logoutBtn">Sign out</button>
+      </footer>
+    </aside>
+
+    <main class="work" id="work" aria-label="Post">
+      <div class="wbar" id="wbar" hidden>
+        <button type="button" class="wback" id="backBtn"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5L7 10l5.5 5.5"/></svg>Calendar</button>
+        <span class="wbar-name" id="wbarName" aria-hidden="true"></span>
+        <span></span>
+      </div>
+      <div class="work-empty" id="workEmpty">
+        <div class="cc-sk" aria-hidden="true"><i></i><i></i><i></i></div>
+      </div>
+      <header class="whead" id="whead" hidden>
+        <div class="whead-id">
+          <p class="crumb" id="crumb"></p>
+          <h2 id="pTitle" tabindex="-1"></h2>
+          <p class="wsub" id="pSub"></p>
+        </div>
+        <div class="whead-acts">
+          <div class="cc-status" id="statusGroup" role="group" aria-label="Where this post stands"></div>
+        </div>
+      </header>
+      <div class="cc-body" id="pBody" hidden>
+        <div class="cc-col">
+          <section class="scard" aria-labelledby="hHook">
+            <header><span class="num">01</span><h3 id="hHook">Hook &amp; cover</h3></header>
+            <p class="cc-label">On screen, first frame</p>
+            <p class="cc-hook" id="pHook"></p>
+            <dl class="facts" id="pFacts"></dl>
+          </section>
+          <section class="scard" aria-labelledby="hScript">
+            <header><span class="num">02</span><h3 id="hScript">Script</h3><span class="cc-meta" id="scriptMeta"></span></header>
+            <div class="cc-act" id="scriptFoot">
+              <p class="cc-where" id="notesWhere"></p>
+              <button type="button" class="btn btn-gold btn-sm cc-copy" id="copyScript" data-label="Copy script"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6.5" y="6.5" width="10" height="10" rx="2"/><path d="M13.5 6.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v7A1.5 1.5 0 0 0 5 13.5h1.5"/></svg><span>Copy script</span></button>
+            </div>
+            <ol class="cc-script" id="pScript"></ol>
+          </section>
+          <section class="scard" aria-labelledby="hShots">
+            <header><span class="num">03</span><h3 id="hShots">Shot list</h3></header>
+            <ol class="cc-shots" id="pShots"></ol>
+          </section>
+        </div>
+        <div class="cc-col">
+          <section class="scard" aria-labelledby="hCap">
+            <header><span class="num">04</span><h3 id="hCap">Captions</h3></header>
+            <div class="cc-plat" id="platforms" role="group" aria-label="Platform"></div>
+            <div class="cc-act cc-act-cap">
+              <p class="cc-when" id="capWhen"></p>
+              <button type="button" class="btn btn-ink btn-sm cc-copy" id="copyCaption" data-label="Copy caption"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6.5" y="6.5" width="10" height="10" rx="2"/><path d="M13.5 6.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v7A1.5 1.5 0 0 0 5 13.5h1.5"/></svg><span>Copy caption</span></button>
+            </div>
+            <div class="cc-caption" id="pCaption" role="region" tabindex="0" aria-label="Caption text"></div>
+            <p class="cc-meta cc-count" id="capCount"></p>
+          </section>
+          <section class="scard" aria-labelledby="hCheck">
+            <header><span class="num">05</span><h3 id="hCheck">Before you post</h3></header>
+            <ul class="cc-checks" id="pChecks"></ul>
+          </section>
+          <section class="scard" aria-labelledby="hNotes">
+            <header><span class="num">06</span><h3 id="hNotes">Your notes</h3></header>
+            <label class="sr-only" for="noteBox">Your notes on this post</label>
+            <textarea id="noteBox" maxlength="4000" placeholder="Takes you liked, what to fix, the link once it's up…"></textarea>
+            <div class="note-acts"><span id="noteState"></span><button type="button" class="btn btn-ghost btn-sm" id="noteSave" disabled>Save note</button></div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="cc-toast" id="toast" role="status" aria-live="polite"></div>
+  <p class="sr-only" id="srStatus" aria-live="polite"></p>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="/js/config.js"></script>
+  <script type="module" src="/js/content.js?v=2"></script>
+</body>
+</html>
