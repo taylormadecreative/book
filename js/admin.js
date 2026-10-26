@@ -429,6 +429,10 @@ const pickName = (it) => (it.filename || it.storage_path.split("/").pop().replac
 
 function galleriesCard(p) {
   const gals = (p.bk_galleries || []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
+  // a storyboard still being built is a draft (locked, never reviewed): the client can't see it yet
+  const isDraft = (g) => g.kind === "storyboard" && g.locked && !g.review_outcome;
+  const liveBoards = gals.filter((g) => g.kind === "storyboard" && !isDraft(g));
+  const latestBoard = liveBoards[liveBoards.length - 1];
   const blocks = gals.length ? gals.map((g) => {
     const items = (g.bk_gallery_items || []).slice()
       .sort((a, b) => (a.sort - b.sort) || a.created_at.localeCompare(b.created_at));
@@ -440,13 +444,20 @@ function galleriesCard(p) {
     const meta = g.kind === "proof"
       ? `<span class="pill ${sel ? "gold" : ""}">${sel} selected${g.selection_limit != null ? ` / ${g.selection_limit}` : ""}</span>`
       : isBoard
-        ? (g.locked && g.review_outcome === "approved" ? `<span class="pill green">Approved</span>`
+        ? (isDraft(g) ? `<span class="pill">Draft · ${items.length} frame${items.length === 1 ? "" : "s"} · client can't see it</span>`
+          : g.locked && g.review_outcome === "approved" ? `<span class="pill green">Approved</span>`
           : g.locked ? `<span class="pill gold">${notes.length} change${notes.length === 1 ? "" : "s"} sent</span>`
           : `<span class="pill">${items.length} frames${notes.length ? ` · ${notes.length} note${notes.length === 1 ? "" : "s"}` : " · waiting on client"}</span>`)
         : `<span class="pill">${items.length} item${items.length === 1 ? "" : "s"}</span>`;
-    // a reviewed storyboard reopens for another round (her notes stay on the frames until she clears them)
-    const lockBtn = g.kind === "proof" || (isBoard && g.locked)
-      ? `<button class="ga-lock" data-lock="${g.id}" data-on="${g.locked}" data-kind="${g.kind}">${isBoard ? "Reopen for review" : g.locked ? "Locked" : "Open"}</button>` : "";
+    // a draft goes live with "Send to client" (no message is sent; that's yours to write). The latest
+    // reviewed storyboard can reopen for another round (her notes stay on the frames until she clears them)
+    const lockBtn = g.kind === "proof" || (isBoard && isDraft(g) && items.length) || (isBoard && g.locked && g === latestBoard)
+      ? `<button class="ga-lock" data-lock="${g.id}" data-on="${g.locked}" data-kind="${g.kind}" data-draft="${isDraft(g)}">${isBoard ? (isDraft(g) ? "Send to client" : "Reopen for review") : g.locked ? "Locked" : "Open"}</button>` : "";
+    // where approving takes her: the deposit invoice (paste the HoneyBook link)
+    const payRow = isBoard ? `
+        <label class="ga-payurl"><span class="hud">Deposit link</span>
+          <input type="url" inputmode="url" data-payurl="${g.id}" value="${esc(g.pay_url || "")}" placeholder="https://… HoneyBook invoice. Approving takes her here.">
+        </label>` : "";
     const copyBtn = g.kind === "proof" && sel
       ? `<button class="ga-lock" data-copypicks="${g.id}" title="Copy the picked file names, without .jpg">Copy picks</button>` : "";
     const cells = isVideo
@@ -475,7 +486,7 @@ function galleriesCard(p) {
           <div class="ga-picks-head"><span class="hud">Client notes</span><b>${notes.length}</b></div>
           <ol class="ga-notes">${notes.map((it) => `<li><b>${esc(frameCode(it))}${it.meta && it.meta.tc ? ` · ${esc(it.meta.tc)}` : ""}</b><span>${esc(it.client_note)}</span></li>`).join("")}</ol>
         </div>` : "";
-    const body = isBoard ? noteList + grid : sel ? `
+    const body = isBoard ? payRow + noteList + grid : sel ? `
         <div class="ga-picks">
           <div class="ga-picks-head"><span class="hud">Client picks</span><b>${sel}</b></div>
           <ol class="ga-names">${picks.map((it) => `<li>${esc(pickName(it))}${it.extra ? ` <span class="ga-x">extra</span>` : ""}</li>`).join("")}</ol>
@@ -704,11 +715,13 @@ function wireDetail(p) {
     const title = $("#galTitle").value.trim() || GAL_KIND[kind];
     const limRaw = $("#galLimit").value.trim();
     const row = { project_id: p.id, kind, title };
+    // a new storyboard starts as a draft: upload every frame, then "Send to client"
+    if (kind === "storyboard") row.locked = true;
     if (kind === "proof" && limRaw) row.selection_limit = Math.max(1, parseInt(limRaw, 10) || 0);
     const { error } = await sb.from("bk_galleries").insert(row);
     if (error) { toast("Could not create gallery"); return; }
     $("#galTitle").value = ""; $("#galLimit").value = "";
-    toast(`${GAL_KIND[kind]} gallery created`);
+    toast(kind === "storyboard" ? "Storyboard draft created. Upload the frames, then Send to client." : `${GAL_KIND[kind]} gallery created`);
     await load();
   });
 
@@ -752,10 +765,19 @@ function wireDetail(p) {
   $("#dpane").querySelectorAll("[data-lock]").forEach((b) => b.addEventListener("click", async () => {
     const on = b.dataset.on !== "true";
     const board = b.dataset.kind === "storyboard";
-    // reopening a storyboard clears the last review so the client can approve or send notes again
-    await sb.from("bk_galleries").update(board && !on ? { locked: false, review_outcome: null, reviewed_at: null } : { locked: on }).eq("id", b.dataset.lock);
-    toast(board ? "Storyboard reopened for the client" : on ? "Proofing locked" : "Proofing reopened");
+    // opening a storyboard (a draft, or another round) clears the last review so she can approve or send notes
+    const { error } = await sb.from("bk_galleries").update(board && !on ? { locked: false, review_outcome: null, reviewed_at: null } : { locked: on }).eq("id", b.dataset.lock);
+    if (error) { toast("Couldn't change that. Try again."); return; }
+    toast(board ? (b.dataset.draft === "true" ? "Storyboard is live in the client's portal. No message was sent." : "Storyboard reopened for the client")
+      : on ? "Proofing locked" : "Proofing reopened");
     await load();
+  }));
+
+  $("#dpane").querySelectorAll("[data-payurl]").forEach((inp) => inp.addEventListener("change", async () => {
+    const v = inp.value.trim();
+    if (v && !/^https:\/\/[^\s"'<>]+$/.test(v)) { toast("Paste the full https:// link"); inp.focus(); return; }
+    const { error } = await sb.from("bk_galleries").update({ pay_url: v || null }).eq("id", inp.dataset.payurl);
+    toast(error ? "Couldn't save the link" : v ? "Deposit link saved. Approving takes her there." : "Deposit link removed");
   }));
 
   $("#dpane").querySelectorAll("[data-galdel]").forEach((b) => b.addEventListener("click", async () => {

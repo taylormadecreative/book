@@ -91,7 +91,11 @@ async function init() {
     renderHero();
   });
   root.addEventListener("bkgallery:reviewed", (e) => {
-    if (media && media.storyboard) { media.storyboard.state = e.detail.outcome; media.storyboard.notes = e.detail.notes; }
+    if (media && media.storyboard) {
+      media.storyboard.state = e.detail.outcome;
+      media.storyboard.notes = e.detail.notes;
+      if (e.detail.payUrl) media.storyboard.payUrl = e.detail.payUrl;
+    }
     renderHero();
   });
   // the per-photo price comes from the studio's settings; no price, no extras offer
@@ -211,10 +215,13 @@ function renderHero() {
     cta = heroButton("pen", "Review your storyboard", `${plural(sb.count, "frame")} · approve it or request changes`, 'data-act="storyboard"');
   } else if (st === "boardNotes") {
     h = "Your notes are with Nelson.";
-    cta = heroAside("He's updating the frames you flagged. The new version will show up on this page.");
+    cta = heroAside("He's going over the frames you flagged. Updated frames will show up on this page.");
   } else if (st === "boardApproved") {
     h = "Storyboard approved.";
-    cta = heroAside("The story is locked in. Nelson takes it from here.");
+    // next is the deposit: straight to the invoice when Nelson has added its link (HoneyBook)
+    cta = media.storyboard.payUrl
+      ? heroButton("card", "Pay your deposit", "On HoneyBook · production starts once it's paid", 'data-act="deposit"')
+      : heroAside("Next is your deposit. Nelson will send your invoice, and production starts once it's paid.");
   } else if (st === "picking") {
     h = "Pick your favorites.";
     const pr = media.proof;
@@ -226,6 +233,7 @@ function renderHero() {
   } else if (st === "pay") {
     const inv = unpaid()[0];
     h = isExtras(inv) ? "Lock in your extra edits."
+      : inv.kind === "deposit" && noShoot(p) ? "Your deposit is ready."
       : inv.kind === "deposit" && !shootPassed(p) ? "Lock in your date."
       : ["new", "quoted"].includes(p.status) ? "Your quote is ready." : "Your invoice is ready.";
     cta = heroButton("card", `Pay ${money(inv.amount_cents)}`, `${inv.title}${inv.due_date ? ` · Due ${shortDate(inv.due_date)}` : ""}`, `data-pay="${esc(inv.id)}"`);
@@ -472,6 +480,8 @@ function paidBanner() {
   const inv = (data.invoices || []).find((i) => i.id === sessionStorage.getItem("bk_paying"));
   $("#paidText").textContent = inv && isExtras(inv)
     ? "Payment received. Your extra edits are locked in, and your receipt is on its way to your email."
+    : inv && inv.kind === "deposit" && noShoot(data.project)
+    ? "Payment received. Your deposit is in, so production can start. Your receipt is on its way to your email."
     : inv && inv.kind === "deposit"
     ? "Payment received. Your date is locked in, and your receipt is on its way to your email."
     : "Payment received. Thank you! Your receipt is on its way to your email.";
@@ -554,6 +564,7 @@ document.addEventListener("click", (e) => {
   if (a === "download" && media && media.finals) media.finals.download(act);
   else if (a === "pick" && media && media.proof) goTo("photos", media.proof.el);
   else if (a === "storyboard" && media && media.storyboard) goTo("photos", media.storyboard.el);
+  else if (a === "deposit" && media && media.storyboard && media.storyboard.payUrl) location.assign(media.storyboard.payUrl);
   else if (a === "video") goTo("photos", $("#galleryRoot .g-block[data-kind='video']"));
   else if (a === "sign") goTo("details", $("#contractsBlock"));
   else if (a === "files") goTo("photos", $("#filesBlock"));

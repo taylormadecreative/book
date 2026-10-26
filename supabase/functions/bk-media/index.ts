@@ -96,6 +96,12 @@ Deno.serve(async (req: Request) => {
   const db = svc();
   const access = await resolveAccess(req, body, db);
   const allow = (pid: string) => access.staff || (access.projectIds?.has(pid) ?? false);
+  // the storyboard functions refuse with a code; anything else is a real failure
+  const rpcError = (error: { message?: string }) => {
+    const code = /\b(not_found|locked|superseded|already_submitted|outcome_changed|empty)\b/.exec(error.message || "")?.[1];
+    if (!code) throw new Error(error.message || "rpc_failed");
+    return json({ error: code }, code === "not_found" ? 404 : 409);
+  };
 
   try {
     if (body.action === "list") {
@@ -121,11 +127,15 @@ Deno.serve(async (req: Request) => {
       const byGallery: Record<string, any[]> = {};
       for (const s of signed) (byGallery[s.gallery_id] ||= []).push(s);
 
+      // a storyboard Nelson is still building (a draft: locked, never reviewed) or one with no frames
+      // yet stays out of the client's view, including portal pages cached from before storyboards
+      const hidden = (g: any) => !access.staff && g.kind === "storyboard" &&
+        ((g.locked && !g.review_outcome) || !(byGallery[g.id] || []).length);
       const out = (projects || []).map((p: any) => ({
         ...p,
-        galleries: (galleries || []).filter((g: any) => g.project_id === p.id).map((g: any) => ({
+        galleries: (galleries || []).filter((g: any) => g.project_id === p.id && !hidden(g)).map((g: any) => ({
           id: g.id, kind: g.kind, title: g.title, selection_limit: g.selection_limit, locked: g.locked,
-          review_outcome: g.review_outcome ?? null, reviewed_at: g.reviewed_at ?? null,
+          review_outcome: g.review_outcome ?? null, reviewed_at: g.reviewed_at ?? null, pay_url: g.pay_url ?? null,
           items: byGallery[g.id] || [],
         })),
       }));
@@ -179,51 +189,30 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, count: n });
     }
 
-    // storyboard: the client's change note on one frame (empty clears it)
+    // storyboard: the client's change note on one frame (empty clears it). The lock check and the
+    // write happen in one database call (bk_storyboard_note), so a note can't land after a review.
     if (body.action === "storyboard_note") {
       const { data: item } = await db.from("bk_gallery_items")
-        .select("id, project_id, gallery_id").eq("id", body.item_id).maybeSingle();
+        .select("id, project_id").eq("id", body.item_id).maybeSingle();
       if (!item || !allow(item.project_id)) return json({ error: "not_found" }, 404);
-      const { data: gal } = await db.from("bk_galleries").select("kind, locked").eq("id", item.gallery_id).maybeSingle();
-      if (!gal || gal.kind !== "storyboard") return json({ error: "not_found" }, 404);
-      if (gal.locked) return json({ error: "locked" }, 409);
-      const note = typeof body.note === "string" ? body.note.trim().slice(0, 1000) : "";
-      await db.from("bk_gallery_items")
-        .update({ client_note: note || null, client_note_at: note ? new Date().toISOString() : null }).eq("id", item.id);
-      return json({ ok: true, note: note || null });
+      const note = typeof body.note === "string" ? body.note.slice(0, 4000) : "";
+      const { data, error } = await db.rpc("bk_storyboard_note", { p_item: item.id, p_note: note });
+      if (error) return rpcError(error);
+      return json(data);
     }
 
-    // storyboard: send the review. Notes on any frame = changes; no notes = approved.
-    // The outcome is decided here from what's saved, never trusted from the browser.
+    // storyboard: send the review. Notes on any frame = changes; none = approved, decided in the
+    // database from what's saved (never trusted from the browser). The lock and Nelson's message are
+    // one transaction (bk_storyboard_submit).
     if (body.action === "storyboard_submit") {
       const { data: gal } = await db.from("bk_galleries")
-        .select("id, project_id, kind, locked, title").eq("id", body.gallery_id).maybeSingle();
+        .select("id, project_id, kind").eq("id", body.gallery_id).maybeSingle();
       if (!gal || !allow(gal.project_id) || gal.kind !== "storyboard") return json({ error: "not_found" }, 404);
-      if (gal.locked) return json({ error: "already_submitted" }, 409);
-      const { data: frames } = await db.from("bk_gallery_items").select("sort, meta, client_note")
-        .eq("gallery_id", gal.id).order("sort");
-      const all = frames || [];
-      if (!all.length) return json({ error: "empty" }, 409);
-      const noted = all.filter((f: any) => f.client_note);
-      const outcome = noted.length ? "changes" : "approved";
-      // the page said "approve" but a note landed from another device: show them, don't approve past it
-      if (body.expect && body.expect !== outcome) return json({ error: "outcome_changed", outcome, notes: noted.length }, 409);
-      const now = new Date().toISOString();
-      // lock only if still open (guards a double-submit race)
-      const { data: locked } = await db.from("bk_galleries")
-        .update({ locked: true, review_outcome: outcome, reviewed_at: now })
-        .eq("id", gal.id).eq("locked", false).select("id");
-      if (!locked || !locked.length) return json({ error: "already_submitted" }, 409);
-      const label = (f: any) => {
-        const m = f.meta || {};
-        return [m.code || `Frame ${f.sort}`, m.tc].filter(Boolean).join(" · ");
-      };
-      const body_ = outcome === "approved"
-        ? `Approved the storyboard "${gal.title}" (${all.length} frames). Good to go.`
-        : `Requested changes on ${noted.length} frame${noted.length === 1 ? "" : "s"} of "${gal.title}":\n\n` +
-          noted.map((f: any) => `${label(f)}\n${f.client_note}`).join("\n\n");
-      await db.from("bk_messages").insert({ project_id: gal.project_id, sender: "client", body: body_.slice(0, 4000) });
-      return json({ ok: true, outcome, notes: noted.length, reviewed_at: now });
+      const expect = body.expect === "approved" || body.expect === "changes" ? body.expect : null;
+      const expectNotes = Number.isInteger(body.expect_notes) ? body.expect_notes : null;
+      const { data, error } = await db.rpc("bk_storyboard_submit", { p_gallery: gal.id, p_expect: expect, p_expect_notes: expectNotes });
+      if (error) return rpcError(error);
+      return json(data);
     }
 
     return json({ error: "unknown_action" }, 400);

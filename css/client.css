@@ -279,7 +279,7 @@ ol, ul { padding: 0; list-style: none; }
 .hero-cta .btn-xl { min-width: 340px; max-width: 100%; white-space: normal; text-align: center; padding-block: 0.55em; }
 .hero-cta.is-aside { align-items: flex-end; }
 .hero-aside { max-width: 34ch; color: var(--on-ink-muted); font-size: 1.05rem; line-height: 1.45; text-align: right; text-wrap: balance; }
-.hero-note { color: var(--on-ink-muted); font-size: 0.95rem; text-align: center; max-width: 34ch; }
+.hero-note { color: var(--on-ink-muted); font-size: 0.95rem; text-align: center; max-width: 34ch; text-wrap: balance; }
 .hero-pay { min-width: 340px; max-width: 100%; white-space: normal; margin-top: 0.2rem; }
 .hero-when { display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem; text-align: right; }
 .hero-when .eyebrow { font-size: 0.78rem; }
@@ -610,7 +610,7 @@ ol, ul { padding: 0; list-style: none; }
   padding: 0.75rem 0.8rem 0.75rem 1.3rem;
   border: 0;
   border-radius: 999px;
-  background: rgba(11, 11, 13, 0.95);
+  background: var(--ink);
   color: var(--on-ink);
   box-shadow: 0 16px 34px -18px rgba(11, 11, 13, 0.7);
 }
@@ -963,7 +963,10 @@ ol, ul { padding: 0; list-style: none; }
 /* ---------------- storyboard review (gallery-core storyboardBlock) ----------------
    A shot list, not a photo grid: scenes in order, each frame a 16:9 card with its
    code, timecode, action and line. A note turns the card gold; one review at the end. */
-.sb-scenes { display: grid; gap: 2.6rem; margin-top: 0.5rem; }
+.sb-scenes { display: grid; gap: 2.6rem; margin-top: 2.25rem; }
+.sb-scene { scroll-margin-top: calc(var(--bar-h) + 20px); }
+/* her place in the review: once this is on screen she has seen every frame */
+.sb-end { height: 1px; margin-top: -2.6rem; scroll-margin-bottom: 120px; }
 .sb-scene-h {
   display: flex;
   align-items: baseline;
@@ -989,17 +992,18 @@ ol, ul { padding: 0; list-style: none; }
   overflow: hidden;
   transition: border-color 200ms ease, box-shadow 200ms var(--ease);
 }
-/* an odd last frame in a scene spans the row as a featured shot instead of leaving a hole */
-.sb-frames > .sb-frame:last-child:nth-child(odd) { grid-column: 1 / -1; }
+/* the bar and the top bar never cover a frame that's scrolled to */
+.sb-frame { scroll-margin: calc(var(--bar-h) + 12px) 0 110px; }
+/* a featured frame (Nelson's pick, or the last of an odd run) runs the full width: the shot big,
+   the caption beside its button underneath */
+.sb-frame.sb-feat { grid-column: 1 / -1; }
 @media (min-width: 900px) {
-  .sb-frames > .sb-frame:last-child:nth-child(odd) {
-    display: grid;
-    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
-    grid-template-rows: auto 1fr;
-  }
-  .sb-frames > .sb-frame:last-child:nth-child(odd) .sb-shot { grid-row: 1 / span 2; align-self: start; }
-  .sb-frames > .sb-frame:last-child:nth-child(odd) .sb-copy { padding-top: 1.35rem; align-content: start; }
-  .sb-frames > .sb-frame:last-child:nth-child(odd) .sb-fb { align-self: end; }
+  .sb-frame.sb-feat { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+  .sb-feat .sb-shot { grid-column: 1 / -1; }
+  .sb-feat .sb-copy { align-self: start; padding: 1.2rem 1.5rem 1.3rem; }
+  .sb-feat .sb-action { font-size: 1.2rem; }
+  .sb-feat .sb-fb { margin-top: 0; padding: 0 1.5rem 1.3rem 0; }
+  .sb-feat:has(.sb-form, .sb-note) .sb-fb { grid-column: 1 / -1; padding: 0 1.5rem 1.3rem; }
 }
 /* a frame with a change request wears the same gold ring as a pick */
 .sb-frame.has-note { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
@@ -1031,7 +1035,8 @@ ol, ul { padding: 0; list-style: none; }
   letter-spacing: 0.06em;
   text-align: center;
 }
-.sb-shot .g-expand { top: 10px; right: 10px; width: 38px; height: 38px; }
+/* dark like the code chip: a white button would be the brightest thing in a night shot */
+.sb-shot .g-expand { top: 10px; right: 10px; width: 38px; height: 38px; background: rgba(11, 11, 13, 0.72); color: var(--on-ink); box-shadow: none; }
 .sb-shot .g-expand .ico { width: 18px; height: 18px; }
 @media (hover: hover) and (pointer: fine) { .sb-shot:hover img { transform: scale(1.025); } }
 
@@ -1039,6 +1044,8 @@ ol, ul { padding: 0; list-style: none; }
 .sb-tc { font-weight: 500; font-size: 0.8rem; letter-spacing: 0.08em; color: var(--paper-faint); }
 .sb-action { font-size: 1.06rem; line-height: 1.45; }
 .sb-line { font-size: 0.98rem; line-height: 1.45; color: var(--paper-muted); overflow-wrap: anywhere; }
+.sb-cue { display: block; }
+.sb-cue + .sb-cue { margin-top: 0.15rem; }
 .sb-who { margin-right: 0.2rem; font-weight: 600; font-size: 0.74rem; letter-spacing: 0.12em; color: var(--gold-ink); }
 
 .sb-fb { margin-top: auto; padding: 0.9rem 1.15rem 1.15rem; }
@@ -1088,6 +1095,34 @@ ol, ul { padding: 0; list-style: none; }
 .sb-form-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
 .sb-bar { margin-top: 1.8rem; }
+/* the review bar waits for the frames (on the first screen it would sit over the intro) */
+.g-selbar.live.sb-bar { transition: opacity 220ms var(--ease), transform 220ms var(--ease), visibility 0s; }
+.g-selbar.live.sb-bar:not(.armed) {
+  opacity: 0;
+  transform: translateY(12px);
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 160ms ease, visibility 0s 160ms;
+}
+.sb-next .ico { width: 1.1em; height: 1.1em; margin-left: 0.15em; }
+/* the confirm runs two lines: a softer corner, the answers on the right */
+.g-selbar.live.sb-bar:has(.g-confirm) { border-radius: 24px; padding: 1rem 1rem 1rem 1.4rem; }
+.sb-bar .g-confirm { flex: 1 1 32rem; }
+.sb-bar .g-actions { margin-left: auto; }
+/* the Yes after "Approve" can't catch the second half of a double tap */
+.sb-wait { opacity: 0.55; pointer-events: none; }
+.sb-msg {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.sb-pay { min-height: 44px; }
 .sb-short { display: none; }
 .sb-status { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; margin-top: 1rem; }
 .sb { scroll-margin-top: calc(var(--bar-h) + 16px); }
@@ -1119,9 +1154,34 @@ ol, ul { padding: 0; list-style: none; }
 .sb-lb-cap { display: grid; gap: 0.2rem; max-width: 70ch; color: var(--on-ink-muted); font-size: 0.95rem; line-height: 1.4; text-align: center; }
 .sb-lb-cap b { color: var(--on-ink); font-family: var(--font-mono); font-weight: 600; font-size: 0.85rem; letter-spacing: 0.08em; }
 .sb-lb-ask .ico { width: 1.15em; height: 1.15em; }
+.sb-lb-cap .sb-who { color: var(--gold); }
+.sb-lb-line { color: var(--on-ink-muted); }
+.sb-lb-note { color: var(--on-ink); }
+.sb-lb-note i { margin-right: 0.3rem; font-style: normal; font-family: var(--font-mono); font-weight: 600; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
+.sb-lb-row { display: flex; align-items: center; justify-content: center; gap: 0.6rem; }
+.sb-lb-step { display: none; }
 
 @media (max-width: 640px) {
-  .sb-scenes { gap: 2.1rem; }
+  .sb-scenes { gap: 2.1rem; margin-top: 1.75rem; }
+  .sb-end { margin-top: -2.1rem; }
+  /* a note open on a phone: the keyboard needs the room, the bar steps aside until it's saved */
+  .sb.sb-editing .g-selbar.live.sb-bar { opacity: 0; visibility: hidden; pointer-events: none; }
+  .sb-lb-row { width: 100%; }
+  .sb-lb-row .sb-lb-ask { flex: 1 1 auto; }
+  .sb-lb-step {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    border: 1px solid var(--ink-edge);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--on-ink);
+  }
+  .sb-lb-step .ico { width: 20px; height: 20px; }
+  .sb-lb-step:active { transform: scale(0.94); }
   .sb-frames { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .sb-copy { padding: 0.9rem 1rem 0.1rem; }
   .sb-fb { padding: 0.85rem 1rem 1rem; }
@@ -1139,4 +1199,6 @@ ol, ul { padding: 0; list-style: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .sb-shot:active .g-expand { transform: none; }
+  .g-selbar.live.sb-bar, .g-selbar.live.sb-bar:not(.armed) { transform: none; }
+  .sb-lb-step:active { transform: none; }
 }

@@ -765,3 +765,11 @@ body::after { display: none; }
 .ga-notes li::marker { color: var(--paper-faint); }
 .ga-notes b { display: block; font-variant-numeric: tabular-nums; }
 .ga-notes span { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--paper-muted); }
+
+/* storyboard: the deposit link approving leads to */
+.ga-payurl { display: grid; gap: 0.3rem; margin: 0 0 0.9rem; max-width: 52em; }
+.ga-payurl input {
+  height: 38px; padding: 0 0.75rem; border: 1px solid var(--paper-edge); border-radius: 8px;
+  background: #fff; color: var(--paper-ink); font: inherit; font-size: 0.9rem;
+}
+.ga-payurl input:focus { outline: none; border-color: var(--paper-ink); box-shadow: 0 0 0 3px rgba(19, 19, 21, 0.08); }
