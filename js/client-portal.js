@@ -59,6 +59,7 @@ const cityOf = (addr) => {
   return state ? `${parts[parts.length - 2]}, ${state}` : addr;
 };
 const shootPassed = (p) => !!p.event_date && new Date(p.event_date + "T23:59:59") < new Date();
+const noShoot = (p) => !p.event_date && !!(media && media.storyboard);
 const closed = (p) => p.status === "archived" || p.status === "lost";
 // photo names carry the client's name; on their own page it's just noise
 const displayName = (fn, project) => {
@@ -89,6 +90,10 @@ async function init() {
     if (media) { media.openProof = false; media.picksSent = true; media.proof = null; }
     renderHero();
   });
+  root.addEventListener("bkgallery:reviewed", (e) => {
+    if (media && media.storyboard) { media.storyboard.state = e.detail.outcome; media.storyboard.notes = e.detail.notes; }
+    renderHero();
+  });
   // the per-photo price comes from the studio's settings; no price, no extras offer
   const cents = BK.rpc("bk_extra_edit_cents").then(Number).catch(() => 0);
   const mounting = window.BKGallery
@@ -103,6 +108,7 @@ async function init() {
   }
   if (!data || !data.project) return fail("missing");
   media = await mounting;
+  storyboardTab();
   paidBanner();
   render();
   $("#loading").hidden = true;
@@ -147,10 +153,12 @@ function emptyPhotos(project) {
 function stage() {
   const p = data.project;
   if (media && media.openProof) return "picking"; // picks are the one thing waiting on them, even on a second round
+  if (media && media.storyboard && media.storyboard.state === "open") return "storyboard";
   if (media && media.delivered) return "ready";
   if ((data.contracts || []).some((c) => c.status === "sent")) return "sign";
   if (unpaid().length) return "pay";
   if (media && media.picksSent) return "editing";
+  if (media && media.storyboard && !media.delivered) return media.storyboard.state === "approved" ? "boardApproved" : "boardNotes";
   if ((data.files || []).some((f) => safeUrl(f.url)) && p.status === "delivered") return "files";
   if (closed(p)) return "closed";
   if (p.status === "delivered") return "delivered";
@@ -197,6 +205,16 @@ function renderHero() {
     // anything still owed (extra edits, a balance) sits right under the download, never hidden in a tab
     const due = unpaid()[0];
     if (due) cta += `<button class="btn btn-line hero-pay" type="button" data-pay="${esc(due.id)}">${icon("card")}<span class="label">Pay ${money(due.amount_cents)} · ${esc(due.title)}</span></button>`;
+  } else if (st === "storyboard") {
+    h = "Your storyboard is ready.";
+    const sb = media.storyboard;
+    cta = heroButton("pen", "Review your storyboard", `${plural(sb.count, "frame")} · approve it or request changes`, 'data-act="storyboard"');
+  } else if (st === "boardNotes") {
+    h = "Your notes are with Nelson.";
+    cta = heroAside("He's updating the frames you flagged. The new version will show up on this page.");
+  } else if (st === "boardApproved") {
+    h = "Storyboard approved.";
+    cta = heroAside("The story is locked in. Nelson takes it from here.");
   } else if (st === "picking") {
     h = "Pick your favorites.";
     const pr = media.proof;
@@ -259,7 +277,8 @@ function renderHero() {
   renderTracker(p);
 
   const ready = st === "ready";
-  const about = ready ? (media.finals && vids ? "your photos and video" : media.finals ? "your photos" : "your video") : "your project";
+  const board = ["storyboard", "boardNotes", "boardApproved"].includes(st);
+  const about = ready ? (media.finals && vids ? "your photos and video" : media.finals ? "your photos" : "your video") : board ? "your storyboard" : "your project";
   $("#helpH").textContent = ready ? "Need a change?" : "Got a question?";
   $("#helpP").textContent = `Send Nelson a message about ${about}.`;
 }
@@ -289,10 +308,9 @@ function renderTracker(p) {
 function renderRail() {
   const p = data.project;
   const when = p.event_date ? `${longDate(p.event_date)}${p.event_time && !shootPassed(p) ? ` · ${p.event_time}` : ""}` : "To be set";
-  const rows = [
-    ["camera", "Service", esc(serviceName(p))],
-    ["calendar", "Shoot date", esc(when)],
-  ];
+  const rows = [["camera", "Service", esc(serviceName(p))]];
+  // an AI or storyboard-first project has no shoot day: no "To be set" for something that won't happen
+  if (!noShoot(p)) rows.push(["calendar", "Shoot date", esc(when)]);
   // after the shoot the street address is noise here (Project details keeps it): "…, Dallas, TX 75201" → "Dallas, TX"
   const loc = p.location && shootPassed(p) ? cityOf(p.location) : p.location;
   if (loc) rows.push(["pin", "Location", esc(loc)]);
@@ -313,11 +331,12 @@ function renderDetails() {
   const p = data.project;
   const shot = shootPassed(p);
   // once the shoot day has passed, an unfilled call time or location is noise, not "to be set"
+  const ns = noShoot(p);
   const rows = [
     ["Service", serviceName(p)],
-    ["Shoot date", p.event_date ? day(p.event_date, { weekday: "long", month: "long", day: "numeric", year: "numeric" }) : "To be set"],
-    ["Call time", p.event_time || (shot ? "" : "To be set")],
-    ["Location", p.location || (shot ? "" : "To be set")],
+    ["Shoot date", p.event_date ? day(p.event_date, { weekday: "long", month: "long", day: "numeric", year: "numeric" }) : ns ? "" : "To be set"],
+    ["Call time", p.event_time || (shot || ns ? "" : "To be set")],
+    ["Location", p.location || (shot || ns ? "" : "To be set")],
     ["Status", STATUS_LABEL[p.status] || p.status],
     ["Project number", p.id.slice(0, 8).toUpperCase()],
   ].filter(([, v]) => v);
@@ -438,6 +457,15 @@ function renderMessages() {
   $("#msgDot").textContent = unread ? ", new message from Nelson" : "";
 }
 
+// a project whose only media is a storyboard: the first tab says so
+function storyboardTab() {
+  if (!media || !media.storyboard || media.delivered || media.proof || media.picksSent) return;
+  const t = $("#tab-photos");
+  t.setAttribute("aria-label", "Storyboard");
+  $(".t-long", t).textContent = "Storyboard";
+  $(".t-short", t).textContent = "Storyboard";
+}
+
 /* ---------------- paid banner ---------------- */
 function paidBanner() {
   if (!JUST_PAID) return;
@@ -464,7 +492,7 @@ function initialTab() {
   const hasMedia = !!$("#galleryRoot .g-block");
   if (st === "pay" && tabOk("invoices")) return "invoices";
   if (st === "sign") return "details";
-  if (["ready", "picking", "editing", "files", "delivered"].includes(st) || hasMedia) return "photos";
+  if (["ready", "picking", "editing", "files", "delivered", "storyboard", "boardNotes", "boardApproved"].includes(st) || hasMedia) return "photos";
   return "details";
 }
 
@@ -525,6 +553,7 @@ document.addEventListener("click", (e) => {
   const a = act.dataset.act;
   if (a === "download" && media && media.finals) media.finals.download(act);
   else if (a === "pick" && media && media.proof) goTo("photos", media.proof.el);
+  else if (a === "storyboard" && media && media.storyboard) goTo("photos", media.storyboard.el);
   else if (a === "video") goTo("photos", $("#galleryRoot .g-block[data-kind='video']"));
   else if (a === "sign") goTo("details", $("#contractsBlock"));
   else if (a === "files") goTo("photos", $("#filesBlock"));

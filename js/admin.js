@@ -417,7 +417,9 @@ function autosize(el) {
 }
 
 /* ---------------- galleries (photos & video) ---------------- */
-const GAL_KIND = { proof: "Proofing", final: "Edited photos", video: "Video" };
+const GAL_KIND = { proof: "Proofing", final: "Edited photos", video: "Video", storyboard: "Storyboard" };
+// a storyboard frame's code from its caption ("3B"), else its place in the set
+const frameCode = (it) => (it.meta && it.meta.code) || `Frame ${it.sort}`;
 
 // Once a client has picked, a proofing gallery leads with just the picks and folds the full set away.
 // Remember which full sets Nelson opened so the 15s re-render doesn't snap them shut.
@@ -433,11 +435,18 @@ function galleriesCard(p) {
     const picks = g.kind === "proof" ? items.filter((i) => i.selected) : [];
     const sel = picks.length;
     const isVideo = g.kind === "video";
+    const isBoard = g.kind === "storyboard";
+    const notes = isBoard ? items.filter((i) => i.client_note) : [];
     const meta = g.kind === "proof"
       ? `<span class="pill ${sel ? "gold" : ""}">${sel} selected${g.selection_limit != null ? ` / ${g.selection_limit}` : ""}</span>`
-      : `<span class="pill">${items.length} item${items.length === 1 ? "" : "s"}</span>`;
-    const lockBtn = g.kind === "proof"
-      ? `<button class="ga-lock" data-lock="${g.id}" data-on="${g.locked}">${g.locked ? "Locked" : "Open"}</button>` : "";
+      : isBoard
+        ? (g.locked && g.review_outcome === "approved" ? `<span class="pill green">Approved</span>`
+          : g.locked ? `<span class="pill gold">${notes.length} change${notes.length === 1 ? "" : "s"} sent</span>`
+          : `<span class="pill">${items.length} frames${notes.length ? ` · ${notes.length} note${notes.length === 1 ? "" : "s"}` : " · waiting on client"}</span>`)
+        : `<span class="pill">${items.length} item${items.length === 1 ? "" : "s"}</span>`;
+    // a reviewed storyboard reopens for another round (her notes stay on the frames until she clears them)
+    const lockBtn = g.kind === "proof" || (isBoard && g.locked)
+      ? `<button class="ga-lock" data-lock="${g.id}" data-on="${g.locked}" data-kind="${g.kind}">${isBoard ? "Reopen for review" : g.locked ? "Locked" : "Open"}</button>` : "";
     const copyBtn = g.kind === "proof" && sel
       ? `<button class="ga-lock" data-copypicks="${g.id}" title="Copy the picked file names, without .jpg">Copy picks</button>` : "";
     const cells = isVideo
@@ -447,20 +456,26 @@ function galleriesCard(p) {
             <button class="ga-itemdel" data-itemdel="${it.id}" title="Remove">&#10005;</button>
           </div>`).join("")
       : items.map((it) => `
-          <figure class="ga-cell ${it.selected ? "sel" : ""}" data-path="${esc(it.storage_path)}">
+          <figure class="ga-cell ${it.selected || it.client_note ? "sel" : ""}" data-path="${esc(it.storage_path)}"${isBoard && it.client_note ? ` title="${esc(it.client_note)}"` : ""}>
             <img alt="${esc(it.filename || "")}" data-ph loading="lazy">
+            ${isBoard ? `<span class="ga-code">${esc(frameCode(it))}</span>` : ""}
             ${it.selected ? `<span class="ga-tick">&#10003;</span>` : ""}
             <button class="ga-itemdel" data-itemdel="${it.id}" title="Remove">&#10005;</button>
           </figure>`).join("");
     const grid = `
-        <div class="${isVideo ? "ga-vlist" : "ga-grid"}">
+        <div class="${isVideo ? "ga-vlist" : isBoard ? "ga-grid ga-sb" : "ga-grid"}">
           ${cells}
           <label class="ga-add">
             <input type="file" class="vh" multiple accept="${isVideo ? "video/*" : "image/*"}" data-upload="${g.id}">
             <span>&#43; Upload</span>
           </label>
         </div>`;
-    const body = sel ? `
+    const noteList = notes.length ? `
+        <div class="ga-picks">
+          <div class="ga-picks-head"><span class="hud">Client notes</span><b>${notes.length}</b></div>
+          <ol class="ga-notes">${notes.map((it) => `<li><b>${esc(frameCode(it))}${it.meta && it.meta.tc ? ` · ${esc(it.meta.tc)}` : ""}</b><span>${esc(it.client_note)}</span></li>`).join("")}</ol>
+        </div>` : "";
+    const body = isBoard ? noteList + grid : sel ? `
         <div class="ga-picks">
           <div class="ga-picks-head"><span class="hud">Client picks</span><b>${sel}</b></div>
           <ol class="ga-names">${picks.map((it) => `<li>${esc(pickName(it))}${it.extra ? ` <span class="ga-x">extra</span>` : ""}</li>`).join("")}</ol>
@@ -495,6 +510,7 @@ function galleriesCard(p) {
           <option value="proof">Proofing (client picks)</option>
           <option value="final">Edited photos</option>
           <option value="video">Video</option>
+          <option value="storyboard">Storyboard (client review)</option>
         </select>
         <input id="galTitle" placeholder="Gallery title" aria-label="Gallery title">
         <input id="galLimit" type="number" min="1" placeholder="Pick limit (optional)" aria-label="Pick limit">
@@ -583,7 +599,7 @@ async function uploadToGallery(p, galleryId, files) {
     });
     if (up.error) { failed++; done++; show(); continue; }
     if (gal?.kind !== "video" && /^image\//.test(file.type)) {
-      const thumb = await makeThumb(file, gal?.kind === "final");
+      const thumb = await makeThumb(file, gal?.kind === "final" || gal?.kind === "storyboard");
       // a missing thumb is fine: the grids fall back to the full image
       if (thumb) await sb.storage.from("project-media").upload(thumbPath(key), thumb, { contentType: "image/jpeg", upsert: true });
     }
@@ -735,8 +751,10 @@ function wireDetail(p) {
 
   $("#dpane").querySelectorAll("[data-lock]").forEach((b) => b.addEventListener("click", async () => {
     const on = b.dataset.on !== "true";
-    await sb.from("bk_galleries").update({ locked: on }).eq("id", b.dataset.lock);
-    toast(on ? "Proofing locked" : "Proofing reopened");
+    const board = b.dataset.kind === "storyboard";
+    // reopening a storyboard clears the last review so the client can approve or send notes again
+    await sb.from("bk_galleries").update(board && !on ? { locked: false, review_outcome: null, reviewed_at: null } : { locked: on }).eq("id", b.dataset.lock);
+    toast(board ? "Storyboard reopened for the client" : on ? "Proofing locked" : "Proofing reopened");
     await load();
   }));
 

@@ -756,3 +756,12 @@ body::after { display: none; }
 
 /* a paid extra edit the client added past the included picks (portal, 2026-10-21) */
 .ga-x { margin-left: 0.4em; padding: 0.05em 0.5em; border-radius: 999px; background: #f6ead0; color: var(--gold-ink); font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; }
+
+/* storyboard galleries: 16:9 frames with their code, the client's notes listed above */
+.ga-sb { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.ga-sb .ga-cell { aspect-ratio: 16 / 9; }
+.ga-code { position: absolute; left: 6px; top: 6px; padding: 0.1rem 0.45rem; border-radius: 999px; background: rgba(11, 11, 13, 0.82); color: var(--gold); font-family: var(--font-mono); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; }
+.ga-notes { margin: 0 0 0.9rem; padding-left: 1.7em; max-width: 52em; display: grid; gap: 0.55rem; font-size: 0.95rem; line-height: 1.45; color: var(--paper-ink); user-select: text; }
+.ga-notes li::marker { color: var(--paper-faint); }
+.ga-notes b { display: block; font-variant-numeric: tabular-nums; }
+.ga-notes span { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--paper-muted); }

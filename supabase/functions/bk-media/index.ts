@@ -71,15 +71,17 @@ async function signItems(db: ReturnType<typeof svc>, items: any[], kindByGallery
   const byPath = (r: any) => new Map<string, string | null>((r.data || []).map((d: any) => [d.path, d.signedUrl || null]));
   const inlineBy = byPath(inline), thumbBy = byPath(thumbs);
   return Promise.all(items.map(async (it) => {
-    // proofs are for picking, not downloading; finals + video keep a named download link
+    // proofs are for picking and storyboards are for reviewing (the frames are Nelson's); finals + video keep a named download link
     let download_url: string | null = null;
-    if (kindByGallery[it.gallery_id] !== "proof") {
+    const kind = kindByGallery[it.gallery_id];
+    if (kind === "final" || kind === "video") {
       const dl = await bucket.createSignedUrl(it.storage_path, SIGN_TTL, { download: it.filename || "download" });
       download_url = dl.data?.signedUrl || null;
     }
     return {
       id: it.id, gallery_id: it.gallery_id, filename: it.filename, content_type: it.content_type,
       size_bytes: it.size_bytes, sort: it.sort, selected: it.selected,
+      meta: it.meta || {}, client_note: it.client_note ?? null,
       url: inlineBy.get(it.storage_path) ?? null, thumb_url: thumbBy.get(thumbPath(it.storage_path)) ?? null, download_url,
     };
   }));
@@ -123,6 +125,7 @@ Deno.serve(async (req: Request) => {
         ...p,
         galleries: (galleries || []).filter((g: any) => g.project_id === p.id).map((g: any) => ({
           id: g.id, kind: g.kind, title: g.title, selection_limit: g.selection_limit, locked: g.locked,
+          review_outcome: g.review_outcome ?? null, reviewed_at: g.reviewed_at ?? null,
           items: byGallery[g.id] || [],
         })),
       }));
@@ -174,6 +177,53 @@ Deno.serve(async (req: Request) => {
           (picks || []).map((p: any) => p.filename || "(unnamed)").join("\n"),
       });
       return json({ ok: true, count: n });
+    }
+
+    // storyboard: the client's change note on one frame (empty clears it)
+    if (body.action === "storyboard_note") {
+      const { data: item } = await db.from("bk_gallery_items")
+        .select("id, project_id, gallery_id").eq("id", body.item_id).maybeSingle();
+      if (!item || !allow(item.project_id)) return json({ error: "not_found" }, 404);
+      const { data: gal } = await db.from("bk_galleries").select("kind, locked").eq("id", item.gallery_id).maybeSingle();
+      if (!gal || gal.kind !== "storyboard") return json({ error: "not_found" }, 404);
+      if (gal.locked) return json({ error: "locked" }, 409);
+      const note = typeof body.note === "string" ? body.note.trim().slice(0, 1000) : "";
+      await db.from("bk_gallery_items")
+        .update({ client_note: note || null, client_note_at: note ? new Date().toISOString() : null }).eq("id", item.id);
+      return json({ ok: true, note: note || null });
+    }
+
+    // storyboard: send the review. Notes on any frame = changes; no notes = approved.
+    // The outcome is decided here from what's saved, never trusted from the browser.
+    if (body.action === "storyboard_submit") {
+      const { data: gal } = await db.from("bk_galleries")
+        .select("id, project_id, kind, locked, title").eq("id", body.gallery_id).maybeSingle();
+      if (!gal || !allow(gal.project_id) || gal.kind !== "storyboard") return json({ error: "not_found" }, 404);
+      if (gal.locked) return json({ error: "already_submitted" }, 409);
+      const { data: frames } = await db.from("bk_gallery_items").select("sort, meta, client_note")
+        .eq("gallery_id", gal.id).order("sort");
+      const all = frames || [];
+      if (!all.length) return json({ error: "empty" }, 409);
+      const noted = all.filter((f: any) => f.client_note);
+      const outcome = noted.length ? "changes" : "approved";
+      // the page said "approve" but a note landed from another device: show them, don't approve past it
+      if (body.expect && body.expect !== outcome) return json({ error: "outcome_changed", outcome, notes: noted.length }, 409);
+      const now = new Date().toISOString();
+      // lock only if still open (guards a double-submit race)
+      const { data: locked } = await db.from("bk_galleries")
+        .update({ locked: true, review_outcome: outcome, reviewed_at: now })
+        .eq("id", gal.id).eq("locked", false).select("id");
+      if (!locked || !locked.length) return json({ error: "already_submitted" }, 409);
+      const label = (f: any) => {
+        const m = f.meta || {};
+        return [m.code || `Frame ${f.sort}`, m.tc].filter(Boolean).join(" · ");
+      };
+      const body_ = outcome === "approved"
+        ? `Approved the storyboard "${gal.title}" (${all.length} frames). Good to go.`
+        : `Requested changes on ${noted.length} frame${noted.length === 1 ? "" : "s"} of "${gal.title}":\n\n` +
+          noted.map((f: any) => `${label(f)}\n${f.client_note}`).join("\n\n");
+      await db.from("bk_messages").insert({ project_id: gal.project_id, sender: "client", body: body_.slice(0, 4000) });
+      return json({ ok: true, outcome, notes: noted.length, reviewed_at: now });
     }
 
     return json({ error: "unknown_action" }, 400);

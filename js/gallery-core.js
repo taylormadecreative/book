@@ -13,6 +13,10 @@
  *     opts.extras = { cents, request(galleryId, itemIds) } offers extra edits past the included
  *       picks (v2 only): picked locally, then one request once they confirm the total.
  *     Fires "bkgallery:sent" on the container when picks are sent.
+ *   Storyboards (kind "storyboard", v2 only): frames in story order grouped by scene, each with its
+ *     caption (item.meta) and an optional change note. One review either approves the storyboard or
+ *     sends the notes to Nelson; it fires "bkgallery:reviewed" { outcome }. mount() also returns
+ *     storyboard = { el, count, state: "open" | "approved" | "changes", notes }.
  */
 (function () {
   const esc = (s) =>
@@ -30,6 +34,7 @@
     chevron: svg("M9.5 5.5L16 12l-6.5 6.5"),
     prev: svg("M14.5 5.5L8 12l6.5 6.5"),
     close: svg("M6.5 6.5l11 11M17.5 6.5l-11 11"),
+    pen: svg("M4.5 19.5l1-4L15.5 5.5l3 3-10 10zM13.5 7.5l3 3"),
   };
   const CHECK = () => (V2 ? ICON.check : "&#10003;");
   const SMALL = matchMedia("(max-width: 900px), (pointer: coarse)");
@@ -175,6 +180,13 @@
     });
     el.querySelector(".g-lb-bar").addEventListener("click", (e) => {
       if (e.target.closest(".g-lb-dl") && lb.ctx) { freshDownload(e, lb.ctx, lb.list[lb.i]); return; }
+      // storyboard: "Request a change" closes the viewer and opens the note under that frame
+      if (e.target.closest(".sb-lb-ask") && lb.ctx) {
+        const ctx = lb.ctx, it = lb.list[lb.i];
+        closeLightbox();
+        if (ctx.openNote && it) ctx.openNote(it);
+        return;
+      }
       if (e.target.closest(".g-lb-pick")) {
         const it = lb.list[lb.i];
         if (it) setPick(lb.ctx, it, !isOn(it));
@@ -237,11 +249,11 @@
     if (ctx) {
       // the "Picked" view may have changed while the viewer was open
       if (ctx.filter === "picked") applyFilter(ctx);
-      const cell = it && ctx.wrap.querySelector(`.g-cell[data-id="${it.id}"]`);
-      const target = (cell && !cell.hidden && cell.querySelector(".g-open")) || lb.returnFocus;
+      const cell = it && ctx.wrap.querySelector(`[data-id="${it.id}"]`);
+      const target = (cell && !cell.hidden && cell.querySelector(".g-open, .sb-shot")) || lb.returnFocus;
       if (target) {
         target.focus({ preventScroll: true });
-        target.closest(".g-cell")?.scrollIntoView({ block: "nearest" });
+        target.closest("[data-id]")?.scrollIntoView({ block: "nearest" });
       }
     }
   }
@@ -261,8 +273,8 @@
     const many = list.length > 1;
     lb.el.querySelectorAll(".g-lb-nav").forEach((b) => { b.hidden = !many; });
     lb.el.querySelector(".g-lb-count").textContent = `${i + 1} / ${list.length}`;
-    lb.el.querySelector(".g-lb-name").textContent = (ctx.shown ? ctx.shown(it) : it.filename) || "";
-    img.alt = `Photo ${i + 1} of ${list.length}`;
+    lb.el.querySelector(".g-lb-name").textContent = (ctx.lbName ? ctx.lbName(it) : ctx.shown ? ctx.shown(it) : it.filename) || "";
+    img.alt = g.kind === "storyboard" ? `Frame ${frameLabel(it)}, ${i + 1} of ${list.length}` : `Photo ${i + 1} of ${list.length}`;
 
     // show the cached thumbnail instantly, then swap in the full image. v2 on a phone keeps a
     // final on its 1620px display copy: the originals run 30-50MB, too much to decode on an iPhone.
@@ -284,6 +296,14 @@
     }
 
     const bar = lb.el.querySelector(".g-lb-bar");
+    if (g.kind === "storyboard") {
+      const m = it.meta || {};
+      const cap = `<p class="sb-lb-cap"><b>${esc([frameLabel(it), m.tc].filter(Boolean).join(" · "))}</b>${m.action ? `<span>${esc(m.action)}</span>` : ""}</p>`;
+      bar.innerHTML = cap + (!g.locked
+        ? `<button class="g-lb-pick sb-lb-ask${it.client_note ? " on" : ""}" type="button">${ICON.pen}${it.client_note ? "Edit your note" : "Request a change"}</button>`
+        : it.client_note ? `<span class="g-lb-tally">Change requested</span>` : "");
+      return;
+    }
     if (g.kind === "proof") {
       const n = pickedCount(g), lim = g.selection_limit, x = xCount(ctx);
       const choosing = ctx.mode === "extras";
@@ -737,9 +757,309 @@
     }
   }
 
+  /* ---------------- storyboard (v2): frames in story order, a change note per frame, one review ---------------- */
+  // captions come from item.meta: { code, tc, scene_no, scene, action, line }; admin uploads may have none
+  function frameLabel(it) { return (it.meta && it.meta.code) || `Frame ${it.sort || ""}`.trim(); }
+  const tcEnds = (tc) => (tc || "").split(/\s*[–-]\s*/);
+  // "JAKE: "Bro…"" → the speaker set as a small label, the line as written
+  const lineHTML = (line) => {
+    const m = /^([A-Z][A-Z0-9 .'()\/&-]{0,38}):\s*([\s\S]+)$/.exec((line || "").trim());
+    return m ? `<span class="sb-who">${esc(m[1])}</span> ${esc(m[2])}` : esc(line);
+  };
+  const sbNotes = (g) => g.items.filter((i) => i.client_note).length;
+  // a half-written note shouldn't vanish with an accidental reload
+  let sbGuard = false;
+  function guardDrafts() {
+    if (sbGuard) return;
+    sbGuard = true;
+    window.addEventListener("beforeunload", (e) => {
+      const dirty = [...document.querySelectorAll(".sb-form textarea")].some((t) => t.value.trim() !== (t.dataset.saved || ""));
+      if (dirty) { e.preventDefault(); e.returnValue = ""; }
+    });
+  }
+
+  function storyboardBlock(access, project, g, resign, stale, opts = {}) {
+    guardDrafts();
+    const wrap = document.createElement("section");
+    wrap.className = "g-block sb" + (opts.superseded ? " sb-past" : "");
+    wrap.dataset.kind = "storyboard";
+    const byId = (id) => g.items.find((x) => x.id === id);
+    const scenes = [];
+    g.items.forEach((it) => {
+      const m = it.meta || {};
+      const key = m.scene_no != null ? String(m.scene_no) : (m.scene || "");
+      let sc = scenes[scenes.length - 1];
+      if (!sc || sc.key !== key) scenes.push((sc = { key, no: m.scene_no, name: m.scene || "", items: [] }));
+      sc.items.push(it);
+    });
+    const sceneOf = (it) => scenes.find((sc) => sc.items.includes(it));
+    const ctx = {
+      access, project, g, wrap, resign, stale, confirming: false, editing: new Set(),
+      lbName: (it) => { const sc = sceneOf(it); return !sc || !sc.key ? g.title : sc.no != null ? `Scene ${sc.no} · ${sc.name}` : sc.name; },
+    };
+    ctx.openNote = (it) => openNote(it);
+
+    const n = g.items.length;
+    const open = !g.locked;
+    const k = sbNotes(g);
+    const when = g.reviewed_at ? new Date(g.reviewed_at).toLocaleDateString("en-US", { month: "long", day: "numeric" }) : "";
+    const head = document.createElement("div");
+    head.className = "g-block-head";
+    head.innerHTML = opts.superseded
+      ? `<div><h2 class="g-h" tabindex="-1">Earlier version</h2><p class="g-sub">${esc(g.title)} · ${n} frames</p></div>`
+      : `<div><h2 class="g-h" tabindex="-1">Your storyboard</h2><p class="g-sub">${esc(g.title)} · ${n} frame${n === 1 ? "" : "s"}</p><div class="sb-status" hidden></div>${open && n ? `
+        <p class="g-intro">Every shot of your commercial, in order. Tap a frame to see it big. Want something different? Hit <b>Request a change</b> on that frame and tell Nelson what you'd like. When it all looks right, approve it at the bottom.</p>` : ""}</div>`;
+    wrap.appendChild(head);
+
+    if (!n) {
+      const empty = document.createElement("p");
+      empty.className = "g-empty";
+      empty.textContent = "Your storyboard frames will show up here once Nelson uploads them.";
+      wrap.appendChild(empty);
+      return { wrap, ctx };
+    }
+
+    const frameHTML = (it) => {
+      const m = it.meta || {};
+      const code = esc(frameLabel(it));
+      return `<li class="sb-frame${it.client_note ? " has-note" : ""}" data-id="${esc(it.id)}">
+        <button class="sb-shot" type="button" aria-label="View frame ${code} big">
+          <img loading="lazy" decoding="async" src="${esc(it.thumb_url || it.url)}" alt="">
+          <span class="sb-code" aria-hidden="true">${code}</span>
+          <span class="g-expand" aria-hidden="true">${ICON.expand}</span>
+        </button>
+        <div class="sb-copy">
+          <p class="sb-tc"><span class="vh">Frame ${code}, </span>${esc(m.tc || "")}</p>
+          ${m.action ? `<p class="sb-action">${esc(m.action)}</p>` : ""}
+          ${m.line ? `<p class="sb-line">${lineHTML(m.line)}</p>` : ""}
+        </div>
+        <div class="sb-fb">${fbHTML(it)}</div>
+      </li>`;
+    };
+    const scenesHTML = scenes.map((sc, i) => {
+      const first = tcEnds((sc.items[0].meta || {}).tc)[0], last = tcEnds((sc.items[sc.items.length - 1].meta || {}).tc).pop();
+      const range = first && last ? `${first}–${last}` : "";
+      const id = `sb-${g.id}-${i}`;
+      return `<section class="sb-scene"${sc.key ? ` aria-labelledby="${id}"` : ""}>
+        ${sc.key ? `<header class="sb-scene-h">
+          <span class="sb-scene-n">Scene ${sc.no != null ? String(sc.no).padStart(2, "0") : i + 1}</span>
+          <h3 id="${id}">${esc(sc.name)}</h3>
+          ${range ? `<span class="sb-scene-tc">${esc(range)}</span>` : ""}
+        </header>` : ""}
+        <ol class="sb-frames">${sc.items.map(frameHTML).join("")}</ol>
+      </section>`;
+    }).join("");
+
+    const body = document.createElement("div");
+    body.className = "sb-scenes";
+    body.innerHTML = scenesHTML;
+    if (opts.superseded) {
+      // an earlier round stays reachable, folded under one row
+      const det = document.createElement("details");
+      det.className = "sb-old";
+      det.innerHTML = `<summary><span><b>${esc(g.title)}</b><small>${g.review_outcome === "approved" ? "Approved" : `${k} change${k === 1 ? "" : "s"} sent`}${when ? ` · ${esc(when)}` : ""}</small></span><span class="g-orig-cta">Show frames ${ICON.chevron}</span></summary>`;
+      det.appendChild(body);
+      wrap.appendChild(det);
+    } else {
+      wrap.appendChild(body);
+      const bar = document.createElement("div");
+      bar.className = "g-selbar sb-bar";
+      bar.setAttribute("aria-live", "polite");
+      wrap.appendChild(bar);
+    }
+    renderBar();
+
+    function fbHTML(it) {
+      const code = esc(frameLabel(it));
+      if (!g.locked && ctx.editing.has(it.id)) {
+        const fid = `sb-n-${esc(it.id)}`;
+        return `<form class="sb-form" data-note-form novalidate>
+          <label for="${fid}">What should change in ${code}?</label>
+          <textarea id="${fid}" rows="3" maxlength="1000" data-saved="${esc(it.client_note || "")}" placeholder="Say what you'd like different in this shot.">${esc(it.client_note || "")}</textarea>
+          <div class="sb-form-row">
+            <button class="btn btn-gold" type="submit"><span class="label">Save note</span></button>
+            <button class="btn btn-ghost" type="button" data-sb="cancel">Cancel</button>
+          </div>
+          <p class="form-err" role="alert" hidden></p>
+        </form>`;
+      }
+      if (it.client_note) {
+        return `<div class="sb-note">
+          <span class="sb-tag">${ICON.pen}Change requested</span>
+          <p class="sb-note-t">${esc(it.client_note)}</p>
+          ${!g.locked ? `<div class="sb-note-acts">
+            <button class="sb-link" type="button" data-sb="edit">Edit note</button>
+            <button class="sb-link" type="button" data-sb="remove">Remove</button>
+          </div>` : ""}
+        </div>`;
+      }
+      return !g.locked ? `<button class="btn btn-ghost sb-ask" type="button" data-sb="edit">${ICON.pen}<span>Request a change</span></button>` : "";
+    }
+
+    function refreshFrame(it) {
+      const li = wrap.querySelector(`.sb-frame[data-id="${it.id}"]`);
+      if (!li) return null;
+      li.classList.toggle("has-note", !!it.client_note);
+      li.querySelector(".sb-fb").innerHTML = fbHTML(it);
+      return li;
+    }
+
+    function renderBar() {
+      const bar = wrap.querySelector(".sb-bar");
+      if (!bar) return;
+      const k = sbNotes(g), ks = k === 1 ? "" : "s";
+      if (g.locked) {
+        bar.classList.remove("live");
+        const when = g.reviewed_at ? new Date(g.reviewed_at).toLocaleDateString("en-US", { month: "long", day: "numeric" }) : "";
+        const status = g.review_outcome === "approved"
+          ? `<span class="g-sent">${ICON.check}Storyboard approved${when ? ` · ${esc(when)}` : ""}</span><span class="g-selnote">Nelson takes it from here.</span>`
+          : `<span class="g-sent sb-sent-ch">${ICON.pen}Notes sent · ${k} change${ks}</span><span class="g-selnote">Nelson is updating ${k === 1 ? "that frame" : "those frames"}. The new version will show up here.</span>`;
+        bar.innerHTML = status;
+        // the same status sits at the top, where they land after sending
+        const top = wrap.querySelector(".sb-status");
+        if (top) { top.innerHTML = status; top.hidden = false; }
+        return;
+      }
+      bar.classList.add("live");
+      if (ctx.confirming) {
+        bar.innerHTML = `<span class="g-confirm">${k
+          ? `Send your ${k} note${ks} to Nelson? He'll update ${k === 1 ? "that frame" : "those frames"} and send the storyboard back for another look.`
+          : "Approve the storyboard? Once it's approved, the story is locked and Nelson starts production."}</span>
+          <span class="g-actions">
+            <button class="btn btn-ghost" type="button" data-sb="back">Keep reviewing</button>
+            <button class="btn btn-gold" type="button" data-sb="send"><span class="label">${k ? `Yes, send ${k}` : "Yes, approve"}</span></button>
+          </span>`;
+        return;
+      }
+      // phones show the short version ("1 change" + "Send 1 change") so the bar stays one row
+      bar.innerHTML = `<span class="g-count"><span class="sb-long">${n} frames · ${k ? `${k} change${ks}` : "no changes"} requested</span><span class="sb-short">${k ? `${k} change${ks}` : "No changes"}</span></span>
+        <span class="g-actions">
+          <button class="btn btn-gold" type="button" data-sb="review">${k ? `Send ${k} change${ks}<span class="sb-long"> to Nelson</span>` : "Approve storyboard"}</button>
+        </span>`;
+    }
+
+    function openNote(it) {
+      if (g.locked || !it) return;
+      ctx.editing.add(it.id);
+      const li = refreshFrame(it);
+      const ta = li && li.querySelector("textarea");
+      if (!ta) return;
+      li.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      ta.focus({ preventScroll: true });
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+    }
+
+    function closeNote(it) {
+      ctx.editing.delete(it.id);
+      const li = refreshFrame(it);
+      li?.querySelector("[data-sb='edit']")?.focus({ preventScroll: true });
+    }
+
+    async function saveNote(it, text) {
+      const li = wrap.querySelector(`.sb-frame[data-id="${it.id}"]`);
+      const form = li && li.querySelector("[data-note-form]");
+      const note = (text || "").trim();
+      if (form && !note && !it.client_note) { closeNote(it); return; }
+      const btn = form ? form.querySelector("[type=submit]") : li && li.querySelector("[data-sb='remove']");
+      const err = form && form.querySelector(".form-err");
+      const label = btn && (btn.querySelector(".label") || btn);
+      const was = label && label.textContent;
+      if (btn) { btn.disabled = true; btn.setAttribute("aria-busy", "true"); label.textContent = form ? "Saving…" : "Removing…"; }
+      if (err) err.hidden = true;
+      try {
+        const r = await call(access, { action: "storyboard_note", item_id: it.id, note });
+        it.client_note = r.note || null;
+        ctx.confirming = false;
+        closeNote(it);
+        if (!it.client_note) li?.querySelector("[data-sb='edit']")?.focus({ preventScroll: true });
+        renderBar();
+        toast(it.client_note ? `Note saved on ${frameLabel(it)}.` : `Note removed from ${frameLabel(it)}.`);
+      } catch (e) {
+        if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); label.textContent = was; }
+        if (e.message === "locked") { toast("This storyboard was already sent to Nelson."); return; }
+        if (err) { err.textContent = "Couldn't save your note. Check your connection and try again."; err.hidden = false; }
+        else toast("Couldn't remove that note. Try again.");
+      }
+    }
+
+    async function submitReview() {
+      // an open note that isn't saved would be left out: ask for it first
+      const draft = [...wrap.querySelectorAll(".sb-form textarea")].find((t) => t.value.trim() !== (t.dataset.saved || ""));
+      if (draft) {
+        ctx.confirming = false;
+        renderBar();
+        toast("Save or cancel your open note first.");
+        draft.focus();
+        return;
+      }
+      const k = sbNotes(g);
+      const btn = wrap.querySelector(".sb-bar [data-sb='send']");
+      const label = btn && btn.querySelector(".label");
+      if (btn) { btn.disabled = true; btn.setAttribute("aria-busy", "true"); label.textContent = "Sending…"; }
+      try {
+        const r = await call(access, { action: "storyboard_submit", gallery_id: g.id, expect: k ? "changes" : "approved" });
+        g.locked = true;
+        g.review_outcome = r.outcome;
+        g.reviewed_at = r.reviewed_at;
+        ctx.confirming = false;
+        ctx.editing.clear();
+        g.items.forEach(refreshFrame);
+        wrap.querySelector(".g-intro")?.remove();
+        renderBar();
+        wrap.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+        wrap.querySelector(".g-h")?.focus({ preventScroll: true });
+        toast(r.outcome === "approved" ? "Storyboard approved. Nelson has it." : `Sent ${r.notes} change${r.notes === 1 ? "" : "s"} to Nelson.`);
+        wrap.dispatchEvent(new CustomEvent("bkgallery:reviewed", { bubbles: true, detail: { outcome: r.outcome, notes: r.notes } }));
+      } catch (e) {
+        if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); label.textContent = k ? `Yes, send ${k}` : "Yes, approve"; }
+        if (e.message === "already_submitted" || e.message === "outcome_changed") {
+          toast(e.message === "outcome_changed" ? "A note was just added from another device. Reloading so you can see it." : "This storyboard was already sent. Reloading.");
+          setTimeout(() => location.reload(), 1800);
+          return;
+        }
+        toast("Couldn't send that. Check your connection and try again.");
+      }
+    }
+
+    wrap.addEventListener("click", (e) => {
+      const shot = e.target.closest(".sb-shot");
+      if (shot) {
+        const it = byId(shot.closest("[data-id]").dataset.id);
+        openLightbox(ctx, g.items.slice(), Math.max(0, g.items.indexOf(it)), shot);
+        return;
+      }
+      const b = e.target.closest("[data-sb]");
+      if (!b || b.disabled) return;
+      const a = b.dataset.sb;
+      const li = b.closest("[data-id]");
+      const it = li && byId(li.dataset.id);
+      if (a === "edit") openNote(it);
+      else if (a === "cancel") closeNote(it);
+      else if (a === "remove") saveNote(it, "");
+      else if (a === "review") { ctx.confirming = true; renderBar(); wrap.querySelector(".sb-bar [data-sb='send']")?.focus(); }
+      else if (a === "back") { ctx.confirming = false; renderBar(); wrap.querySelector(".sb-bar [data-sb='review']")?.focus(); }
+      else if (a === "send") submitReview();
+    });
+    wrap.addEventListener("submit", (e) => {
+      const f = e.target.closest("[data-note-form]");
+      if (!f) return;
+      e.preventDefault();
+      const it = byId(f.closest("[data-id]").dataset.id);
+      if (!f.querySelector("[type=submit]").disabled) saveNote(it, f.querySelector("textarea").value);
+    });
+    wrap.addEventListener("keydown", (e) => {
+      const ta = e.target.closest(".sb-form textarea");
+      if (!ta) return;
+      const it = byId(ta.closest("[data-id]").dataset.id);
+      if (e.key === "Escape" && ta.value.trim() === (ta.dataset.saved || "")) { e.preventDefault(); closeNote(it); }
+      else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); ta.form.requestSubmit(); }
+    });
+    return { wrap, ctx };
+  }
+
   async function mount(container, access, opts = {}) {
     V2 = !!opts.v2;
-    const none = { openProof: false, delivered: false, picksSent: false, finals: null, videos: 0, proof: null };
+    const none = { openProof: false, delivered: false, picksSent: false, finals: null, videos: 0, proof: null, storyboard: null };
     container.innerHTML = V2
       ? `<div class="g-skel" aria-hidden="true"><i></i><i></i><i></i></div>`
       : `<div class="g-loading hud">LOADING YOUR MEDIA…</div>`;
@@ -769,6 +1089,8 @@
     };
 
     container.innerHTML = "";
+    // storyboards are reviewed in the v2 portal only; the older pages leave them out
+    if (!V2) projects.forEach((p) => { p.galleries = (p.galleries || []).filter((g) => g.kind !== "storyboard"); });
     const hasAny = projects.some((p) => (p.galleries || []).length);
     if (!hasAny) {
       const custom = typeof opts.emptyHTML === "function" ? opts.emptyHTML(projects[0]) : opts.emptyHTML;
@@ -776,11 +1098,12 @@
       return none;
     }
     const multi = projects.length > 1;
-    let openProof = false, delivered = false, picksSent = false, videos = 0, proof = null, finalCtx = null;
+    let openProof = false, delivered = false, picksSent = false, videos = 0, proof = null, finalCtx = null, storyboard = null;
     const finalItems = [];
-    // what they came for first: proofs waiting on picks, then edits + video, then proofs already sent
-    // (a sent proof set can be hundreds of photos; the edits shouldn't sit under it)
-    const rank = (g) => g.kind === "proof" ? (g.locked ? 3 : 0) : g.kind === "final" ? 1 : 2;
+    const deliverable = (g) => g.kind === "final" || g.kind === "video";
+    // what they came for first: proofs waiting on picks or a storyboard to review, then edits + video,
+    // then a reviewed storyboard, then proofs already sent (hundreds of photos; the edits shouldn't sit under it)
+    const rank = (g) => g.kind === "proof" ? (g.locked ? 3 : 0) : g.kind === "storyboard" ? (g.locked ? 2.5 : 0) : g.kind === "final" ? 1 : 2;
     projects.forEach((p) => {
       if (!(p.galleries || []).length) return;
       if (multi) {
@@ -789,7 +1112,10 @@
         h.textContent = p.title || p.client_name;
         container.appendChild(h);
       }
-      const gotEdits = p.galleries.some((g) => g.kind !== "proof" && g.items.length);
+      const gotEdits = p.galleries.some((g) => deliverable(g) && g.items.length);
+      // a newer storyboard replaces an older one; the older round folds away
+      const boards = p.galleries.filter((g) => g.kind === "storyboard");
+      const latestBoard = boards[boards.length - 1];
       p.galleries.forEach((g) => {
         // once picks are sent, show just the chosen ones (a proof set can be hundreds of photos)
         if (g.kind === "proof") g.all = g.items.slice();
@@ -800,7 +1126,17 @@
         g.delivered = gotEdits;
       });
       p.galleries.slice().sort((a, b) => rank(a) - rank(b)).forEach((g) => {
-        if (g.kind !== "proof" && g.items.length) delivered = true;
+        if (g.kind === "storyboard") {
+          const superseded = g !== latestBoard;
+          const { wrap } = storyboardBlock(access, p, g, resign, stale, { ...opts, superseded });
+          if (!superseded) {
+            storyboard = { el: wrap, count: g.items.length, notes: sbNotes(g),
+              state: !g.locked ? "open" : g.review_outcome === "approved" ? "approved" : "changes" };
+          }
+          container.appendChild(wrap);
+          return;
+        }
+        if (deliverable(g) && g.items.length) delivered = true;
         if (g.picksOnly) picksSent = true;
         if (g.kind === "video") videos += g.items.length;
         if (g.kind === "final") finalItems.push(...g.items);
@@ -823,7 +1159,7 @@
         location.href = finalItems[0].download_url || finalItems[0].url;
       },
     } : null;
-    return { openProof, delivered, picksSent, finals, videos, proof };
+    return { openProof, delivered, picksSent, finals, videos, proof, storyboard };
   }
 
   window.BKGallery = { mount };
