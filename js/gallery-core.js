@@ -277,12 +277,13 @@
     lb.el.querySelectorAll(".g-lb-nav").forEach((b) => { b.hidden = !many; });
     const sb = g.kind === "storyboard";
     lb.el.classList.toggle("is-sb", sb);
-    lb.el.setAttribute("aria-label", sb ? "Storyboard viewer" : "Photo viewer");
-    lb.el.querySelector(".g-lb-nav.prev").setAttribute("aria-label", sb ? "Previous frame" : "Previous photo");
-    lb.el.querySelector(".g-lb-nav.next").setAttribute("aria-label", sb ? "Next frame" : "Next photo");
+    const unit = sb ? ctx.noun || "frame" : "photo";
+    lb.el.setAttribute("aria-label", sb ? (unit === "image" ? "Location viewer" : "Storyboard viewer") : "Photo viewer");
+    lb.el.querySelector(".g-lb-nav.prev").setAttribute("aria-label", `Previous ${unit}`);
+    lb.el.querySelector(".g-lb-nav.next").setAttribute("aria-label", `Next ${unit}`);
     lb.el.querySelector(".g-lb-count").textContent = `${i + 1} / ${list.length}`;
     lb.el.querySelector(".g-lb-name").textContent = (ctx.lbName ? ctx.lbName(it) : ctx.shown ? ctx.shown(it) : it.filename) || "";
-    img.alt = g.kind === "storyboard" ? `Frame ${frameLabel(it)}, ${i + 1} of ${list.length}` : `Photo ${i + 1} of ${list.length}`;
+    img.alt = g.kind === "storyboard" ? `${ctx.noun === "image" ? "Image" : "Frame"} ${frameLabel(it)}, ${i + 1} of ${list.length}` : `Photo ${i + 1} of ${list.length}`;
 
     // show the cached thumbnail instantly, then swap in the full image. v2 on a phone keeps a
     // final on its 1620px display copy: the originals run 30-50MB, too much to decode on an iPhone.
@@ -310,7 +311,7 @@
       const act = ctx.editable && ctx.editable()
         ? `<button class="g-lb-pick sb-lb-ask${it.client_note ? " on" : ""}" type="button">${ICON.pen}${it.client_note ? "Edit your note" : "Request a change"}</button>`
         : it.client_note ? `<span class="g-lb-tally">Change requested</span>` : "";
-      const stepBtn = (d) => many ? `<button class="sb-lb-step" type="button" data-step="${d}" aria-label="${d < 0 ? "Previous" : "Next"} frame">${d < 0 ? ICON.prev : ICON.chevron}</button>` : "";
+      const stepBtn = (d) => many ? `<button class="sb-lb-step" type="button" data-step="${d}" aria-label="${d < 0 ? "Previous" : "Next"} ${ctx.noun || "frame"}">${d < 0 ? ICON.prev : ICON.chevron}</button>` : "";
       bar.innerHTML = cap + `<div class="sb-lb-row">${stepBtn(-1)}${act}${stepBtn(1)}</div>`;
       return;
     }
@@ -823,9 +824,14 @@
     const sceneOf = (it) => scenes.find((sc) => sc.items.includes(it));
     // notes only change on the current round while it's open; an earlier round is read only
     const editable = () => !g.locked && !opts.superseded;
+    // a location review (reference images of the place every shot is built in) uses the same review
+    // with its own words; it has no deposit step
+    const loc = g.purpose === "location";
+    const noun = loc ? "image" : "frame", Noun = loc ? "Image" : "Frame";
+    const nouns = (k) => `${k} ${noun}${k === 1 ? "" : "s"}`;
     const endKey = `bk-sb-end:${g.id}`;
     const ctx = {
-      access, project, g, wrap, resign, stale, editable, confirming: false, editing: new Set(), obs: [],
+      access, project, g, wrap, resign, stale, editable, noun, confirming: false, editing: new Set(), obs: [],
       scene: 0, seenEnd: !editable() || store.get(endKey) === "1",
       lbName: (it) => { const sc = sceneOf(it); return !sc || !sc.key ? g.title : sc.no != null ? `Scene ${pad2(sc.no)} · ${sc.name}` : sc.name; },
     };
@@ -857,9 +863,11 @@
     const head = document.createElement("div");
     head.className = "g-block-head";
     head.innerHTML = opts.superseded
-      ? `<div><h2 class="g-h" tabindex="-1">Earlier version</h2><p class="g-sub">${esc(g.title)} · ${n} frames</p></div>`
-      : `<div><h2 class="g-h" tabindex="-1" aria-describedby="${esc(sid)}">Your storyboard</h2><p class="g-sub">${esc(g.title)} · ${n} frame${n === 1 ? "" : "s"}</p><div class="sb-status" id="${esc(sid)}" hidden></div>${editable() && n ? `
-        <p class="g-intro">Every shot of your commercial, in order. Tap a frame to see it big. The story is set, so notes are about how a shot looks: the people, framing, colors, props. Hit <b>Request a change</b> on any frame and tell Nelson what you'd like. When it all looks right, approve it at the end.</p>` : ""}</div>`;
+      ? `<div><h2 class="g-h" tabindex="-1">Earlier version</h2><p class="g-sub">${esc(g.title)} · ${nouns(n)}</p></div>`
+      : `<div><h2 class="g-h" tabindex="-1" aria-describedby="${esc(sid)}">${loc ? "Your location" : "Your storyboard"}</h2><p class="g-sub">${esc(g.title)} · ${nouns(n)}</p><div class="sb-status" id="${esc(sid)}" hidden></div>${editable() && n ? `
+        <p class="g-intro">${loc
+          ? "This is the building every shot of your commercial happens in: the outside, the fun side, the neighborhood side and the whole place from above. Tap an image to see it big. Want something different? Hit <b>Request a change</b> on that image and tell Nelson what you'd like. When it looks right, approve it at the end."
+          : "Every shot of your commercial, in order. Tap a frame to see it big. The story is set, so notes are about how a shot looks: the people, framing, colors, props. Hit <b>Request a change</b> on any frame and tell Nelson what you'd like. When it all looks right, approve it at the end."}</p>` : ""}</div>`;
     wrap.appendChild(head);
 
     if (!n) {
@@ -877,13 +885,13 @@
       // a featured frame runs twice as wide: the full image on a computer, the preview on a phone
       const src = big && !SMALL.matches ? it.url || it.thumb_url : it.thumb_url || it.url;
       return `<li class="sb-frame${big ? " sb-feat" : ""}${it.client_note ? " has-note" : ""}" data-id="${esc(it.id)}">
-        <button class="sb-shot" type="button" aria-label="View frame ${code} big">
+        <button class="sb-shot" type="button" aria-label="View ${noun} ${code} big">
           <img loading="lazy" decoding="async" src="${esc(src)}" alt="">
           <span class="sb-code" aria-hidden="true">${code}</span>
           <span class="g-expand" aria-hidden="true">${ICON.expand}</span>
         </button>
         <div class="sb-copy">
-          <p class="sb-tc"><span class="vh">Frame ${code}, </span>${esc(m.tc || "")}</p>
+          ${m.tc ? `<p class="sb-tc"><span class="vh">${Noun} ${code}, </span>${esc(m.tc)}</p>` : `<p class="vh">${Noun} ${code}</p>`}
           ${m.action ? `<p class="sb-action">${esc(curly(m.action))}</p>` : ""}
           ${m.line ? `<p class="sb-line">${lineHTML(m.line)}</p>` : ""}
         </div>
@@ -968,13 +976,16 @@
       const k = sbNotes(g), ks = k === 1 ? "" : "s";
       const when = dayOf(g.reviewed_at);
       const ask = `<button class="sb-msg" type="button" data-open-messages>Message Nelson</button>`;
+      if (g.review_outcome === "approved" && loc) {
+        return `<span class="g-sent">${ICON.check}Location approved${when ? ` · ${esc(when)}` : ""}</span><span class="g-selnote">Nelson is updating your storyboard in this building. It will show up here. Questions? ${ask}</span>`;
+      }
       if (g.review_outcome === "approved") {
         const pay = safePay(g.pay_url);
         return `<span class="g-sent">${ICON.check}Storyboard approved${when ? ` · ${esc(when)}` : ""}</span>` + (pay
           ? `<a class="btn btn-gold sb-pay" href="${esc(pay)}">Pay your deposit</a><span class="g-selnote">On HoneyBook. Production starts once it's paid.</span>`
           : `<span class="g-selnote">Next is your deposit. Production starts once it's paid. Questions? ${ask}</span>`);
       }
-      return `<span class="g-sent sb-sent-ch">${ICON.pen}Notes sent · ${k} change${ks}</span><span class="g-selnote">Nelson is going over your notes. Updated frames will show up here. Questions? ${ask}</span>`;
+      return `<span class="g-sent sb-sent-ch">${ICON.pen}Notes sent · ${k} change${ks}</span><span class="g-selnote">Nelson is going over your notes. Updated ${noun}s will show up here. Questions? ${ask}</span>`;
     }
 
     function barHTML() {
@@ -984,7 +995,8 @@
       if (ctx.confirming) {
         const pay = safePay(g.pay_url);
         return `<span class="g-confirm">${k
-          ? `Send your ${k} note${ks} to Nelson? He'll go over ${k === 1 ? "it" : "them"} and send updated frames back here.`
+          ? `Send your ${k} note${ks} to Nelson? He'll go over ${k === 1 ? "it" : "them"} and send updated ${noun}s back here.`
+          : loc ? "Approve the location? Nelson will build your updated storyboard in this building."
           : pay ? "Approve the storyboard? Notes close after this, and you'll go straight to your deposit invoice on HoneyBook. Production starts once it's paid."
           : "Approve the storyboard? Notes close after this. Next is your deposit, and production starts once it's paid."}</span>
           <span class="g-actions">
@@ -1001,14 +1013,14 @@
       // until she's seen the last frame, the bar walks her through the scenes
       if (!ctx.seenEnd) {
         const i = Math.min(ctx.scene, scenes.length - 1), last = i >= scenes.length - 1;
-        const where = scenes.length > 1 ? `Scene ${pad2(i + 1)} of ${pad2(scenes.length)}` : `${n} frame${n === 1 ? "" : "s"}`;
+        const where = scenes.length > 1 ? `Scene ${pad2(i + 1)} of ${pad2(scenes.length)}` : nouns(n);
         return `<span class="g-count">${where}<span class="sb-long"> · ${noted}</span></span>
           <span class="g-actions"><button class="btn btn-ghost sb-next" type="button" data-sb="next">${last ? "To the last frame" : "Next scene"}${ICON.down}</button></span>`;
       }
       // phones show the short version ("1 change" + "Send 1 change") so the bar stays one row
-      return `<span class="g-count"><span class="sb-long">${n} frames · ${noted}</span><span class="sb-short">${k ? `${k} change${ks}` : "No notes yet"}</span></span>
+      return `<span class="g-count"><span class="sb-long">${nouns(n)} · ${noted}</span><span class="sb-short">${k ? `${k} change${ks}` : "No notes yet"}</span></span>
         <span class="g-actions">
-          <button class="btn btn-gold" type="button" data-sb="review">${k ? `Send ${k} change${ks}<span class="sb-long"> to Nelson</span>` : "Approve storyboard"}</button>
+          <button class="btn btn-gold" type="button" data-sb="review">${k ? `Send ${k} change${ks}<span class="sb-long"> to Nelson</span>` : loc ? "Approve location" : "Approve storyboard"}</button>
         </span>`;
     }
 
@@ -1141,7 +1153,7 @@
         g.items.forEach(refreshFrame);
         wrap.querySelector(".g-intro")?.remove();
         renderBar();
-        const pay = r.outcome === "approved" && safePay(g.pay_url);
+        const pay = r.outcome === "approved" && !loc && safePay(g.pay_url);
         wrap.dispatchEvent(new CustomEvent("bkgallery:reviewed", { bubbles: true, detail: { outcome: r.outcome, notes: r.notes, payUrl: pay || null } }));
         if (pay) {
           // approving leads straight on to the deposit, as the confirm said
@@ -1294,9 +1306,10 @@
         container.appendChild(h);
       }
       const gotEdits = p.galleries.some((g) => deliverable(g) && g.items.length);
-      // a newer storyboard replaces an older one; the older round folds away
-      const boards = p.galleries.filter((g) => g.kind === "storyboard");
-      const latestBoard = boards[boards.length - 1];
+      // a newer review replaces an older one of the same kind (storyboard or location); the older round folds away
+      const purposeOf = (g) => g.purpose || "storyboard";
+      const latestOf = {};
+      p.galleries.filter((g) => g.kind === "storyboard").forEach((g) => { latestOf[purposeOf(g)] = g; });
       p.galleries.forEach((g) => {
         // once picks are sent, show just the chosen ones (a proof set can be hundreds of photos)
         if (g.kind === "proof") g.all = g.items.slice();
@@ -1308,11 +1321,14 @@
       });
       p.galleries.slice().sort((a, b) => rank(a) - rank(b)).forEach((g) => {
         if (g.kind === "storyboard") {
-          const superseded = g !== latestBoard;
+          const superseded = g !== latestOf[purposeOf(g)];
           const { wrap } = storyboardBlock(access, p, g, resign, stale, { ...opts, superseded });
           if (!superseded) {
-            storyboard = { el: wrap, count: g.items.length, notes: sbNotes(g), payUrl: safePay(g.pay_url),
-              state: !g.locked ? "open" : g.review_outcome === "approved" ? "approved" : "changes" };
+            const sb = { el: wrap, count: g.items.length, notes: sbNotes(g), payUrl: safePay(g.pay_url), purpose: purposeOf(g),
+              reviewedAt: g.reviewed_at || "", state: !g.locked ? "open" : g.review_outcome === "approved" ? "approved" : "changes" };
+            // the hero follows the review waiting on her; with none open, the latest one reviewed
+            if (!storyboard || (sb.state === "open" && storyboard.state !== "open")
+              || (sb.state !== "open" && storyboard.state !== "open" && sb.reviewedAt > storyboard.reviewedAt)) storyboard = sb;
           }
           container.appendChild(wrap);
           return;

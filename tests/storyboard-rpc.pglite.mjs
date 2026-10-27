@@ -37,6 +37,7 @@ await db.exec(`
 await db.exec(readFileSync(`${root}supabase/migrations/20261026_bk_storyboard_review.sql`, "utf8"));
 // twice: a re-run must be harmless
 await db.exec(readFileSync(`${root}supabase/migrations/20261026_bk_storyboard_review.sql`, "utf8"));
+for (let i = 0; i < 2; i++) await db.exec(readFileSync(`${root}supabase/migrations/20261027_bk_storyboard_location.sql`, "utf8"));
 
 const [{ id: P }] = await q(`insert into bk_projects (title) values ('Delilah Amaro — Hide & Haunt Commercial') returning id`);
 const board = async (title, { locked = false, outcome = null, frames = 3, at = "now()", pay = null } = {}) => {
@@ -115,6 +116,24 @@ const K = await board("Proof", { frames: 1, at: "now() + interval '4 minutes'" }
 await q(`update bk_galleries set kind = 'proof' where id = $1`, [K]);
 ok(/not_found/.test(await err(`select bk_storyboard_note($1, 'hi')`, [(await items(K))[0].id])), "notes only on storyboards");
 ok(/not_found/.test(await err(`select bk_storyboard_submit($1, null, null)`, [K])), "review only on storyboards");
+
+/* --- a location review: its own rounds, its own words, no deposit --- */
+const V = await board("Hide & Haunt location", { frames: 4, at: "now() + interval '5 minutes'", pay: "https://taylormadecreative.hbportal.co/app/invoice/abc" });
+await q(`update bk_galleries set purpose = 'location' where id = $1`, [V]);
+ok(!(await q(`select bk_storyboard_superseded($1) as s`, [L]))[0].s, "a location doesn't make the latest storyboard an earlier round");
+ok(/check/.test(await err(`update bk_galleries set purpose = 'brochure' where id = $1`, [V])), "purpose is storyboard or location only");
+const vItems = await items(V);
+await note(vItems[1].id, "Make the building bigger.");
+r = await submit(V, "changes", 1);
+m = await lastMsg();
+ok(r.outcome === "changes" && m.body.startsWith('My notes on 1 image of "Hide & Haunt location":'), "location notes say image: " + m.body.split("\n")[0]);
+const V2 = await board("Hide & Haunt location v2", { frames: 4, at: "now() + interval '6 minutes'", pay: "https://taylormadecreative.hbportal.co/app/invoice/abc" });
+await q(`update bk_galleries set purpose = 'location' where id = $1`, [V2]);
+ok((await q(`select bk_storyboard_superseded($1) as s`, [V]))[0].s, "a newer location replaces the older location");
+r = await submit(V2, "approved", 0);
+m = await lastMsg();
+ok(r.outcome === "approved" && r.pay_url == null, "approving a location never leads to the deposit");
+ok(m.body === 'I approved the location "Hide & Haunt location v2" (4 images).', "location approve message: " + m.body);
 
 /* --- who can call them --- */
 for (const role of ["anon", "authenticated"]) {

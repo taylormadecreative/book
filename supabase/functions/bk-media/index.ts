@@ -136,6 +136,7 @@ Deno.serve(async (req: Request) => {
         galleries: (galleries || []).filter((g: any) => g.project_id === p.id && !hidden(g)).map((g: any) => ({
           id: g.id, kind: g.kind, title: g.title, selection_limit: g.selection_limit, locked: g.locked,
           review_outcome: g.review_outcome ?? null, reviewed_at: g.reviewed_at ?? null, pay_url: g.pay_url ?? null,
+          purpose: g.purpose ?? null,
           items: byGallery[g.id] || [],
         })),
       }));

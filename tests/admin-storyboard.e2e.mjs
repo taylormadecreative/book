@@ -24,6 +24,9 @@ let GALS = [
   gal("g-v1", { title: "Hide & Haunt storyboard v1", locked: true, review_outcome: "changes", reviewed_at: now, created_at: "2026-10-26T10:00:00Z",
     bk_gallery_items: frames("g-v1", 6, { "1C": "Make him look right at the camera.", "2B": "<b>bolder</b> mask" }) }),
   gal("g-v2", { title: "Hide & Haunt storyboard v2", locked: true, created_at: "2026-10-27T10:00:00Z", bk_gallery_items: frames("g-v2", 6) }),
+  // a location review, already sent back with a note: its own rounds, no deposit link
+  gal("g-loc", { title: "Hide & Haunt location", purpose: "location", locked: true, review_outcome: "changes", reviewed_at: now, created_at: "2026-10-27T11:00:00Z",
+    bk_gallery_items: frames("g-loc", 4, { "1B": "Make the building bigger." }) }),
 ];
 const PROJECTS = () => [{ id: PID, title: "Delilah Amaro — Hide & Haunt Commercial", client_name: "Delilah Amaro", client_email: "d@x.com", client_phone: null,
   company: null, service: "other", status: "booked", event_date: null, event_time: null, location: null, budget_range: null, details: "",
@@ -106,6 +109,22 @@ try {
   ok(/6 frames · waiting on client/.test(await card("g-v2").locator(".pill").textContent()), "v2 now waits on the client");
   ok(!(await card("g-v1").locator("[data-lock]").count()), "v1 no longer offers Reopen (v2 is the current round)");
   ok((await page.inputValue('[data-payurl="g-v2"]')) === "https://taylormadecreative.hbportal.co/app/invoice/abc123", "deposit link shows after the refresh");
+
+  // the location card: labeled Location, no deposit link, Reopen on its own latest round
+  const locCard = page.locator(".ga", { has: page.locator("text=Hide & Haunt location") });
+  ok((await locCard.locator(".ga-head .hud").first().textContent()) === "Location", "location card is labeled Location");
+  ok(!(await locCard.locator("[data-payurl]").count()), "a location has no deposit link field");
+  ok((await locCard.locator("[data-lock]").textContent()) === "Reopen for review", "the location can reopen (its own latest round)");
+  ok(/Make the building bigger\./.test(await locCard.locator(".ga-notes").innerText()), "location notes listed");
+
+  // a new location starts as a draft, as a storyboard-kind review with purpose location
+  await page.selectOption("#galKind", "location");
+  await page.fill("#galTitle", "");
+  await page.click("#galCreate");
+  await page.waitForTimeout(400);
+  ok(inserts.length === 1 && inserts[0].kind === "storyboard" && inserts[0].purpose === "location" && inserts[0].locked === true && inserts[0].title === "Location", "a new location is a hidden draft: " + JSON.stringify(inserts[0]));
+  ok(/Location draft created/.test(await page.textContent("#toast")), "location draft toast");
+  inserts.length = 0;
 
   // a new storyboard starts as a draft
   await page.selectOption("#galKind", "storyboard");

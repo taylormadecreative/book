@@ -30,6 +30,12 @@ const board = (gid, extra = {}) => ({ id: gid, kind: "storyboard", title: "Hide 
   items: FRAMES.map((f) => ({ id: `${gid}-${f.meta.code}`, gallery_id: gid, filename: f.file, size_bytes: 400000, sort: f.sort, selected: false,
     content_type: "image/jpeg", meta: f.meta, client_note: (extra.notes || {})[f.meta.code] || null,
     url: `https://img.test/full/${f.file}`, thumb_url: `https://img.test/thumbs/${f.file}`, download_url: null })) });
+// the location review: 4 reference images of the building, no scenes, no timecodes
+const LOCS = IMAGES && existsSync(`${IMAGES}/location.json`) ? JSON.parse(readFileSync(`${IMAGES}/location.json`, "utf8"))
+  : "ABCD".split("").map((c, i) => ({ sort: i + 1, file: `location-${c}.jpg`, meta: { code: c, action: `Location image ${c}.`, ...(c === "A" || c === "D" ? { feature: true } : {}) } }));
+const locBoard = (gid, extra = {}) => ({ ...board(gid, extra), title: "Hide & Haunt location", purpose: "location",
+  items: LOCS.map((f) => ({ id: `${gid}-${f.meta.code}`, gallery_id: gid, filename: f.file, size_bytes: 500000, sort: f.sort, selected: false,
+    content_type: "image/jpeg", meta: f.meta, client_note: null, url: `https://img.test/full/${f.file}`, thumb_url: `https://img.test/thumbs/${f.file}`, download_url: null })) });
 const NAME = "Delilah Amaro";
 const project = (id, extra) => ({ id, title: `${NAME} — Hide & Haunt Commercial`, status: "booked", service: "other", location: null,
   created_at: "2026-10-22T19:04:26Z", event_date: null, event_time: null, client_name: NAME, ...extra });
@@ -43,6 +49,13 @@ const S = {
     board("g1", { locked: true, review_outcome: "changes", reviewed_at: "2026-10-27T15:00:00Z", notes: { "3C": "Make him look at the camera." } }),
     { ...board("g2"), title: "Hide & Haunt storyboard v2" }] }),
   approved: () => ({ p: project("p-approved"), galleries: [board("gd", { locked: true, review_outcome: "approved", reviewed_at: "2026-10-27T15:00:00Z", pay_url: PAY })] }),
+  // her real state after round one: the storyboard went back with notes, the location is up for approval
+  loc: () => ({ p: project("p-loc"), galleries: [
+    board("gs", { locked: true, review_outcome: "changes", reviewed_at: "2026-10-26T20:41:28Z", pay_url: PAY, notes: { "1A": "Not an amusement park." } }),
+    locBoard("gl", { pay_url: PAY })] }),
+  locnotes: () => ({ p: project("p-locnotes"), galleries: [
+    board("gt", { locked: true, review_outcome: "changes", reviewed_at: "2026-10-26T20:41:28Z", notes: { "1A": "Not an amusement park." } }),
+    locBoard("gm")] }),
   // Nelson still uploading: a draft (locked, never reviewed) and an empty board are never shown
   draft: () => ({ p: project("p-draft"), galleries: [board("gx", { locked: true }), { ...board("ge"), items: [] }] }),
 };
@@ -88,8 +101,9 @@ async function wire(page, errors) {
     if (!s) return route.fulfill({ status: 403, json: { error: "forbidden" } });
     if (body.action === "list") return route.fulfill({ json: { projects: [{ id: s.p.id, title: s.p.title, client_name: s.p.client_name, service: s.p.service, status: s.p.status,
       galleries: JSON.parse(JSON.stringify(live(s).map(({ notes, ...g }) => g))) }] } });
-    const boards = live(s).filter((g) => g.kind === "storyboard");
-    const superseded = (g) => boards.indexOf(g) < boards.length - 1;
+    // each kind of review (storyboard, location) has its own rounds
+    const kindOf = (g) => g.purpose || "storyboard";
+    const superseded = (g) => { const same = live(s).filter((x) => x.kind === "storyboard" && kindOf(x) === kindOf(g)); return same.indexOf(g) < same.length - 1; };
     if (body.action === "storyboard_note") {
       const g = s.galleries.find((x) => x.items.some((i) => i.id === body.item_id));
       if (!g) return route.fulfill({ status: 404, json: { error: "not_found" } });
@@ -109,9 +123,10 @@ async function wire(page, errors) {
         return route.fulfill({ status: 409, json: { error: "outcome_changed" } });
       }
       Object.assign(g, { locked: true, review_outcome: outcome, reviewed_at: new Date().toISOString() });
+      const loc = g.purpose === "location", unit = loc ? "image" : "frame";
       s.msgs.push({ id: `mr${s.msgs.length}`, sender: "client", created_at: new Date().toISOString(),
-        body: outcome === "approved" ? `I approved the storyboard "${g.title}" (${g.items.length} frames).` : `My notes on ${noted.length} frames of "${g.title}":` });
-      return route.fulfill({ json: { ok: true, outcome, notes: noted.length, reviewed_at: g.reviewed_at, pay_url: outcome === "approved" ? g.pay_url : null } });
+        body: outcome === "approved" ? `I approved the ${loc ? "location" : "storyboard"} "${g.title}" (${g.items.length} ${unit}s).` : `My notes on ${noted.length} ${unit}${noted.length === 1 ? "" : "s"} of "${g.title}":` });
+      return route.fulfill({ json: { ok: true, outcome, notes: noted.length, reviewed_at: g.reviewed_at, pay_url: outcome === "approved" && !loc ? g.pay_url : null } });
     }
     return route.fulfill({ status: 400, json: { error: "unknown_action" } });
   });
@@ -347,6 +362,56 @@ try {
   await page.waitForSelector("#app:not([hidden])");
   await page.waitForTimeout(600);
   ok(await page.locator(".sb").count() === 0 && (await text(page, "#headline")) !== "Your storyboard is ready.", "a draft or empty storyboard is never shown");
+
+  /* --- the location review (her real state now): approve it, no deposit, the storyboard stays --- */
+  await page.goto(url("p-loc"));
+  await page.waitForSelector(".sb-frame");
+  ok((await text(page, "#headline")) === "Your location is ready." && (await text(page, "#heroCta .btn")) === "Review the location", "location hero");
+  ok((await text(page, "#heroCta .hero-note")) === "4 images · approve it or request changes", "location hero note");
+  const heads = await page.$$eval(".sb > .g-block-head .g-h", (h) => h.map((x) => x.textContent.trim()));
+  ok(JSON.stringify(heads) === JSON.stringify(["Your location", "Your storyboard"]), "location first, the storyboard stays its own block: " + heads.join(" / "));
+  ok(await page.locator(".sb-old").count() === 0, "a location doesn't fold the storyboard away");
+  ok(/This is the building every shot of your commercial happens in/.test(await text(page, ".sb:first-of-type .g-intro, .sb .g-intro")), "location intro");
+  ok(await page.locator(".sb").first().locator(".sb-scene-h").count() === 0 && await page.locator(".sb").first().locator(".sb-frame").count() === 4, "4 images, no scene header");
+  ok(JSON.stringify(await page.locator(".sb").first().locator(".sb-feat .sb-code").allTextContents()) === '["A","D"]', "A and D run full width");
+  ok((await page.locator(".sb").first().locator(".sb-shot").first().getAttribute("aria-label")) === "View image A big", "image, not frame");
+  await page.locator(".sb").first().locator(".sb-shot").nth(1).click();
+  await page.waitForSelector(".g-lightbox:not([hidden])");
+  ok((await page.getAttribute(".g-lightbox", "aria-label")) === "Location viewer" && (await page.getAttribute(".g-lb-nav.next", "aria-label")) === "Next image", "viewer says image");
+  await page.keyboard.press("Escape");
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/12-location-1536.png` });
+  await page.evaluate(() => document.querySelector(".sb .sb-end").scrollIntoView({ block: "end" }));
+  await page.waitForSelector(".sb:first-of-type .sb-bar [data-sb=review], .sb .sb-bar [data-sb=review]");
+  const lbar = page.locator(".sb").first().locator(".sb-bar");
+  ok((await lbar.locator(".g-count").innerText()).replace(/\s+/g, " ").trim() === "4 images · no notes yet" && (await lbar.locator("[data-sb=review]").innerText()).trim() === "Approve location", "location bar");
+  await lbar.locator("[data-sb=review]").click();
+  ok((await lbar.locator(".g-confirm").innerText()).trim() === "Approve the location? Nelson will build your updated storyboard in this building.", "location confirm (no deposit)");
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/13-location-confirm-1536.png` });
+  await lbar.locator("[data-sb=send]").click();
+  await page.locator(".sb").first().locator(".sb-bar:not(.live)").waitFor();
+  await page.waitForTimeout(1800);
+  ok(page.url().startsWith(BASE), "approving a location stays in the portal (no invoice)");
+  ok(/^Location approved/.test(await text(page, ".sb .sb-status .g-sent")) && /Nelson is updating your storyboard in this building/.test(await text(page, ".sb .sb-status")), "location approved status");
+  ok((await text(page, "#headline")) === "Location approved." && /updating your storyboard in this building/.test(await text(page, "#heroCta")), "location approved hero");
+  ok(state["p-loc"].msgs.some((m) => m.body === 'I approved the location "Hide & Haunt location" (4 images).'), "Nelson's location message");
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/14-location-approved-1536.png` });
+
+  /* --- location: send a note instead --- */
+  await page.goto(url("p-locnotes"));
+  await page.waitForSelector(".sb-frame");
+  await page.locator(".sb").first().locator('.sb-frame[data-id="gm-B"] [data-sb=edit]').click();
+  await page.fill('.sb-frame[data-id="gm-B"] textarea', "Make the building bigger.");
+  await page.click('.sb-frame[data-id="gm-B"] [type=submit]');
+  await page.waitForSelector('.sb-frame[data-id="gm-B"].has-note');
+  await page.evaluate(() => document.querySelector(".sb .sb-end").scrollIntoView({ block: "end" }));
+  const nbar = page.locator(".sb").first().locator(".sb-bar");
+  await nbar.locator("[data-sb=review]").waitFor();
+  await nbar.locator("[data-sb=review]").click();
+  ok(/He'll go over it and send updated images back here\./.test(await nbar.locator(".g-confirm").innerText()), "location send confirm says images");
+  await nbar.locator("[data-sb=send]").click();
+  await page.locator(".sb").first().locator(".sb-bar:not(.live)").waitFor();
+  ok((await text(page, "#headline")) === "Your notes are with Nelson." && /images you flagged/.test(await text(page, "#heroCta")), "location notes hero: " + await text(page, "#headline") + " | " + await text(page, "#heroCta"));
+  ok(state["p-locnotes"].msgs.some((m) => /^My notes on 1 image of "Hide & Haunt location"/.test(m.body)), "location notes message");
 
   ok(!errors.length, "no console errors: " + errors.join(" | "));
 

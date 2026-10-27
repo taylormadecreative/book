@@ -210,12 +210,17 @@ function renderHero() {
     const due = unpaid()[0];
     if (due) cta += `<button class="btn btn-line hero-pay" type="button" data-pay="${esc(due.id)}">${icon("card")}<span class="label">Pay ${money(due.amount_cents)} · ${esc(due.title)}</span></button>`;
   } else if (st === "storyboard") {
-    h = "Your storyboard is ready.";
-    const sb = media.storyboard;
-    cta = heroButton("pen", "Review your storyboard", `${plural(sb.count, "frame")} · approve it or request changes`, 'data-act="storyboard"');
+    // the same review for a storyboard (frames) or a location (reference images of the building)
+    const sb = media.storyboard, loc = sb.purpose === "location";
+    h = loc ? "Your location is ready." : "Your storyboard is ready.";
+    cta = heroButton("pen", loc ? "Review the location" : "Review your storyboard", `${plural(sb.count, loc ? "image" : "frame")} · approve it or request changes`, 'data-act="storyboard"');
   } else if (st === "boardNotes") {
     h = "Your notes are with Nelson.";
-    cta = heroAside("He's going over the frames you flagged. Updated frames will show up on this page.");
+    const what = media.storyboard.purpose === "location" ? "images" : "frames";
+    cta = heroAside(`He's going over the ${what} you flagged. Updated ${what} will show up on this page.`);
+  } else if (st === "boardApproved" && media.storyboard.purpose === "location") {
+    h = "Location approved.";
+    cta = heroAside("Nelson is updating your storyboard in this building. It will show up on this page.");
   } else if (st === "boardApproved") {
     h = "Storyboard approved.";
     // next is the deposit: straight to the invoice when Nelson has added its link (HoneyBook)
@@ -286,7 +291,7 @@ function renderHero() {
 
   const ready = st === "ready";
   const board = ["storyboard", "boardNotes", "boardApproved"].includes(st);
-  const about = ready ? (media.finals && vids ? "your photos and video" : media.finals ? "your photos" : "your video") : board ? "your storyboard" : "your project";
+  const about = ready ? (media.finals && vids ? "your photos and video" : media.finals ? "your photos" : "your video") : board ? (media.storyboard.purpose === "location" ? "your location" : "your storyboard") : "your project";
   $("#helpH").textContent = ready ? "Need a change?" : "Got a question?";
   $("#helpP").textContent = `Send Nelson a message about ${about}.`;
 }

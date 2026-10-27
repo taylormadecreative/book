@@ -446,8 +446,9 @@ function galleriesCard(p) {
   const gals = (p.bk_galleries || []).slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
   // a storyboard still being built is a draft (locked, never reviewed): the client can't see it yet
   const isDraft = (g) => g.kind === "storyboard" && g.locked && !g.review_outcome;
-  const liveBoards = gals.filter((g) => g.kind === "storyboard" && !isDraft(g));
-  const latestBoard = liveBoards[liveBoards.length - 1];
+  // each kind of review (storyboard, location) has its own rounds; Reopen sits on the latest of each
+  const latestOf = {};
+  gals.filter((g) => g.kind === "storyboard" && !isDraft(g)).forEach((g) => { latestOf[g.purpose || "storyboard"] = g; });
   const blocks = gals.length ? gals.map((g) => {
     const items = (g.bk_gallery_items || []).slice()
       .sort((a, b) => (a.sort - b.sort) || a.created_at.localeCompare(b.created_at));
@@ -466,10 +467,10 @@ function galleriesCard(p) {
         : `<span class="pill">${items.length} item${items.length === 1 ? "" : "s"}</span>`;
     // a draft goes live with "Send to client" (no message is sent; that's yours to write). The latest
     // reviewed storyboard can reopen for another round (her notes stay on the frames until she clears them)
-    const lockBtn = g.kind === "proof" || (isBoard && isDraft(g) && items.length) || (isBoard && g.locked && g === latestBoard)
+    const lockBtn = g.kind === "proof" || (isBoard && isDraft(g) && items.length) || (isBoard && g.locked && g === latestOf[g.purpose || "storyboard"])
       ? `<button class="ga-lock" data-lock="${g.id}" data-on="${g.locked}" data-kind="${g.kind}" data-draft="${isDraft(g)}">${isBoard ? (isDraft(g) ? "Send to client" : "Reopen for review") : g.locked ? "Locked" : "Open"}</button>` : "";
     // where approving takes her: the deposit invoice (paste the HoneyBook link)
-    const payRow = isBoard ? `
+    const payRow = isBoard && g.purpose !== "location" ? `
         <label class="ga-payurl"><span class="hud">Deposit link</span>
           <input type="url" inputmode="url" data-payurl="${g.id}" value="${esc(g.pay_url || "")}" placeholder="https://… HoneyBook invoice. Approving takes her here.">
         </label>` : "";
@@ -519,7 +520,7 @@ function galleriesCard(p) {
     return `
       <div class="ga">
         <div class="ga-head">
-          <div><span class="hud">${GAL_KIND[g.kind] || g.kind}</span><b>${esc(g.title)}</b></div>
+          <div><span class="hud">${g.purpose === "location" ? "Location" : GAL_KIND[g.kind] || g.kind}</span><b>${esc(g.title)}</b></div>
           <div class="ga-meta">${meta}${copyBtn}${lockBtn}<button class="ga-del" data-galdel="${g.id}" title="Delete gallery">&#10005;</button></div>
         </div>
         ${body}
@@ -537,6 +538,7 @@ function galleriesCard(p) {
           <option value="final">Edited photos</option>
           <option value="video">Video</option>
           <option value="storyboard">Storyboard (client review)</option>
+          <option value="location">Location (client approval)</option>
         </select>
         <input id="galTitle" placeholder="Gallery title" aria-label="Gallery title">
         <input id="galLimit" type="number" min="1" placeholder="Pick limit (optional)" aria-label="Pick limit">
@@ -726,17 +728,21 @@ function wireDetail(p) {
   /* galleries */
   const galCreate = $("#galCreate");
   if (galCreate) galCreate.addEventListener("click", async () => {
-    const kind = $("#galKind").value;
-    const title = $("#galTitle").value.trim() || GAL_KIND[kind];
+    const pick = $("#galKind").value;
+    // a location (the place every shot is built in) is reviewed like a storyboard, with its own rounds
+    const kind = pick === "location" ? "storyboard" : pick;
+    const title = $("#galTitle").value.trim() || (pick === "location" ? "Location" : GAL_KIND[kind]);
     const limRaw = $("#galLimit").value.trim();
     const row = { project_id: p.id, kind, title };
-    // a new storyboard starts as a draft: upload every frame, then "Send to client"
+    if (pick === "location") row.purpose = "location";
+    // a new storyboard or location starts as a draft: upload every image, then "Send to client"
     if (kind === "storyboard") row.locked = true;
     if (kind === "proof" && limRaw) row.selection_limit = Math.max(1, parseInt(limRaw, 10) || 0);
     const { error } = await sb.from("bk_galleries").insert(row);
     if (error) { toast("Could not create gallery"); return; }
     $("#galTitle").value = ""; $("#galLimit").value = "";
-    toast(kind === "storyboard" ? "Storyboard draft created. Upload the frames, then Send to client." : `${GAL_KIND[kind]} gallery created`);
+    toast(pick === "location" ? "Location draft created. Upload the images, then Send to client."
+      : kind === "storyboard" ? "Storyboard draft created. Upload the frames, then Send to client." : `${GAL_KIND[kind]} gallery created`);
     await load();
   });
 
