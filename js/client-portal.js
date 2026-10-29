@@ -67,8 +67,14 @@ const displayName = (fn, project) => {
   const n = ((project && project.client_name) || "").trim();
   return n && fn.toLowerCase().startsWith(n.toLowerCase() + " ") ? fn.slice(n.length + 1) : fn;
 };
-// just back from checkout: the webhook may not have marked it paid yet
-const processing = (inv) => inv.status === "sent" && JUST_PAID && inv.id === sessionStorage.getItem("bk_paying");
+// just back from checkout: the webhook may not have marked it paid yet (a reload in that gap still counts)
+const RETURNED = (() => {
+  try {
+    if (JUST_PAID) sessionStorage.setItem("bk_paid_back", String(Date.now()));
+    return Date.now() - Number(sessionStorage.getItem("bk_paid_back") || 0) < 5 * 60 * 1000;
+  } catch (_) { return JUST_PAID; }
+})();
+const processing = (inv) => inv.status === "sent" && RETURNED && inv.id === sessionStorage.getItem("bk_paying");
 const unpaid = () => (data.invoices || []).filter((i) => i.status === "sent" && !processing(i))
   .sort((a, b) => (a.due_date || "9").localeCompare(b.due_date || "9"));
 const safeUrl = (u) => /^https:\/\//i.test(u || "");
@@ -128,10 +134,10 @@ function fail(kind) {
 }
 $("#retry").addEventListener("click", () => location.reload());
 
-function mountGallery() {
+function mountGallery(quiet = false) {
   if (!window.BKGallery) return Promise.resolve(null);
   return extrasCents.then((c) => BKGallery.mount($("#galleryRoot"), { mode: "token", project_id: PID, token: TOKEN },
-    { v2: true, displayName, emptyHTML: emptyPhotos, extras: c > 0 ? { cents: c, request: requestExtras } : null })).catch(() => null);
+    { v2: true, quiet, displayName, emptyHTML: emptyPhotos, extras: c > 0 ? { cents: c, request: requestExtras } : null })).catch(() => null);
 }
 
 async function refresh() {
@@ -146,15 +152,34 @@ async function refresh() {
 // mount the gallery again so the full-quality file and its Download replace the preview
 async function unlockVideo() {
   const u = media && media.unlock;
+  syncHeldCard();
   if (!u || !u.held || remounting) return;
   if (!(data.invoices || []).some((i) => i.id === u.invoiceId && i.status === "paid")) return;
+  // never cut off the preview mid-play: swap once it pauses or ends
+  const playing = $$("#galleryRoot .g-video.is-held video").find((v) => !v.paused && !v.ended);
+  if (playing) { playing.addEventListener("pause", unlockVideo, { once: true }); return; }
+  const card = $("#galleryRoot .g-video.is-held");
+  const hadFocus = !!card && card.contains(document.activeElement);
   remounting = true;
-  const next = await mountGallery();
+  const next = await mountGallery(true);
   remounting = false;
-  if (!next) return;
+  if (!next || next.error) return;
   media = next;
   heroKey = "";
   render();
+  if (media.unlock && media.unlock.held) return;
+  if (hadFocus) $("#galleryRoot .g-video .g-save")?.focus();
+  $("#paidText").textContent = "Payment received, thank you. Your final video is ready to download below.";
+  $("#paidBanner").hidden = false;
+}
+
+// between checkout and the payment landing, the held card shows a status line instead of the same Pay again
+function syncHeldCard() {
+  const u = media && media.unlock;
+  const box = u && u.held && $("#galleryRoot .g-video.is-held .g-unlock");
+  if (!box) return;
+  const inv = (data.invoices || []).find((i) => i.id === u.invoiceId);
+  box.classList.toggle("is-waiting", !!inv && (inv.status === "paid" || processing(inv)));
 }
 
 // gallery-core calls this when the project has no galleries yet
@@ -224,13 +249,15 @@ function renderHero() {
       const note = f.count > 1 ? `ZIP file${f.mb ? ` · ${f.mb} MB` : ""}` : `Full resolution${f.mb ? ` · ${f.mb} MB` : ""}`;
       cta = heroButton("download", f.count > 1 ? `Download all ${f.count} photos` : "Download your photo", note, 'data-act="download"');
     } else {
-      const held = media.unlock && media.unlock.held;
-      cta = heroButton("arrow-down", vids === 1 ? "Watch your video" : "Watch your videos",
-        held ? "Watermarked preview · download once your balance is paid" : plural(vids, "video"), 'data-act="video"');
+      const u = media.unlock && media.unlock.held ? media.unlock : null;
+      const landing = u && (data.invoices || []).some((i) => i.id === u.invoiceId && (i.status === "paid" || processing(i)));
+      cta = heroButton(u ? "play" : "arrow-down", vids === 1 ? "Watch your video" : "Watch your videos",
+        landing ? "Payment received · your download is on its way" : u ? "Preview now · clean download with your final payment" : plural(vids, "video"), 'data-act="video"');
     }
     // anything still owed (extra edits, a balance) sits right under the download, never hidden in a tab
     const due = unpaid()[0];
-    if (due) cta += `<button class="btn btn-line hero-pay" type="button" data-pay="${esc(due.id)}">${icon("card")}<span class="label">Pay ${money(due.amount_cents)} · ${esc(due.title)}</span></button>`;
+    const unlocks = due && media.unlock && media.unlock.invoiceId === due.id;
+    if (due) cta += `<button class="btn btn-line hero-pay" type="button" data-pay="${esc(due.id)}">${icon("card")}<span class="label" aria-live="polite">${unlocks ? `Pay ${money(due.amount_cents)} and download` : `Pay ${money(due.amount_cents)} · ${esc(due.title)}`}</span></button>`;
   } else if (st === "storyboard") {
     // the same review for a storyboard (frames) or a location (reference images of the building)
     const sb = media.storyboard, loc = sb.purpose === "location";
@@ -506,7 +533,9 @@ function paidBanner() {
   if (!JUST_PAID) return;
   const inv = (data.invoices || []).find((i) => i.id === sessionStorage.getItem("bk_paying"));
   $("#paidText").textContent = inv && media && media.unlock && media.unlock.invoiceId === inv.id
-    ? "Payment received. Your full-quality video unlocks below, ready to download, and your receipt is on its way to your email."
+    ? (media.unlock.held
+      ? "Payment received, thank you. Your final video will be ready to download below in a few seconds, and your receipt is on its way to your email."
+      : "Payment received, thank you. Your final video is below, ready to download, and your receipt is on its way to your email.")
     : inv && isExtras(inv)
     ? "Payment received. Your extra edits are locked in, and your receipt is on its way to your email."
     : inv && inv.kind === "deposit" && noShoot(data.project)
@@ -636,6 +665,7 @@ document.addEventListener("click", async (e) => {
     });
     const out = await res.json();
     if (out.url) { location.href = out.url; return; }
+    if (out.error === "already_paid") { label.textContent = "Already paid"; refresh(); return; }
     label.textContent = out.error === "payments_not_configured" ? "Payments are coming online. Message Nelson." : "Try again";
   } catch (_) {
     label.textContent = "Try again";

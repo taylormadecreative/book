@@ -35,6 +35,7 @@
   --gold-ink: #7a5a0e;
   --green-ink: #1d7a50;
   --green-wash: #e3eedf;
+  --gold-wash: #f6ead0;
   --red-ink: #b3261e;
 
   --ease: cubic-bezier(0.23, 1, 0.32, 1);
@@ -415,7 +416,7 @@ ol, ul { padding: 0; list-style: none; }
   white-space: nowrap;
 }
 .chip-paid { background: var(--green-wash); color: var(--green-ink); }
-.chip-due { background: #f6ead0; color: var(--gold-ink); }
+.chip-due { background: var(--gold-wash); color: var(--gold-ink); }
 
 .card-ink { background: var(--ink); border-color: var(--ink); color: var(--on-ink); padding: 1.6rem 1.55rem 1.7rem; }
 .card-ink .card-h { font-size: 2.4rem; color: var(--on-ink); }
@@ -628,21 +629,10 @@ ol, ul { padding: 0; list-style: none; }
 .g-videos { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); }
 .g-video { overflow: hidden; border-radius: var(--radius); background: var(--card); border: 1px solid var(--paper-line); }
 .g-video video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: var(--ink); }
-/* held until the balance is paid: the watermarked preview, a Preview tag, and the one way to the download */
-.g-video.is-held { grid-column: 1 / -1; }
+/* one video gets the full width, before and after it's paid */
+.g-video:only-child { grid-column: 1 / -1; }
+/* held until the balance is paid: the watermarked preview, a Preview chip, and the one way to the download */
 .g-video.is-held .g-cap { padding-right: 1.25rem; }
-.g-vtag {
-  flex: 0 0 auto;
-  padding: 0.3em 0.75em;
-  border-radius: 999px;
-  background: #f6ead0;
-  color: var(--gold-ink);
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 .g-unlock {
   display: flex;
   align-items: center;
@@ -653,6 +643,10 @@ ol, ul { padding: 0; list-style: none; }
 }
 .g-unlock p { max-width: 52ch; color: var(--paper-muted); font-size: 1rem; line-height: 1.45; }
 .g-unlock .btn { flex: 0 0 auto; }
+/* back from checkout, before the payment lands: a status line instead of the same Pay again */
+.g-unlock-wait { display: none; color: var(--paper-ink); font-weight: 600; }
+.g-unlock.is-waiting .g-unlock-ask, .g-unlock.is-waiting .btn { display: none; }
+.g-unlock.is-waiting .g-unlock-wait { display: block; }
 .g-vwait {
   display: grid;
   place-items: center;
@@ -1091,7 +1085,7 @@ ol, ul { padding: 0; list-style: none; }
 .sb-ask .ico { width: 1.15em; height: 1.15em; }
 @media (hover: hover) and (pointer: fine) { .sb-ask:hover { background: var(--paper-well); } }
 
-.sb-note { display: grid; gap: 0.5rem; padding: 0.85rem 1rem 0.35rem; border-radius: 10px; background: #f6ead0; }
+.sb-note { display: grid; gap: 0.5rem; padding: 0.85rem 1rem 0.35rem; border-radius: 10px; background: var(--gold-wash); }
 .sb-tag { display: inline-flex; align-items: center; gap: 0.45rem; font-weight: 600; font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-ink); }
 .sb-tag .ico { width: 1.25em; height: 1.25em; stroke-width: 2; }
 .sb-note-t { font-size: 1rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -1164,7 +1158,7 @@ ol, ul { padding: 0; list-style: none; }
 .sb-short { display: none; }
 .sb-status { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; margin-top: 1rem; }
 .sb { scroll-margin-top: calc(var(--bar-h) + 16px); }
-.sb-sent-ch { background: #f6ead0; color: var(--gold-ink); }
+.sb-sent-ch { background: var(--gold-wash); color: var(--gold-ink); }
 .g-sent .ico { width: 1.15em; height: 1.15em; }
 
 /* an earlier round, folded under one row */

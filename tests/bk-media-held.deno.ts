@@ -17,13 +17,13 @@ await import("../supabase/functions/bk-media/index.ts");
 const P = "proj-1", G = "gal-video", INV = "inv-bal";
 const ORIG = `${P}/${G}/abc-hide-and-haunt-commercial.mp4`;
 const PREV = `${P}/${G}/preview/abc-hide-and-haunt-commercial.mp4`;
-function seed(status: string, opts: { preview?: boolean; unlock?: string | null } = {}) {
+function seed(status: string, opts: { preview?: boolean; unlock?: string | null; invProject?: string } = {}) {
   fake.reset({
     bk_projects: [{ id: P, access_token: "tok", title: "Delilah Amaro — Hide & Haunt Commercial", client_name: "Delilah Amaro", service: "other", status: "booked", client_email: "d@x.test" }],
     bk_galleries: [{ id: G, project_id: P, kind: "video", title: "Hide & Haunt commercial", locked: false, created_at: "2026-10-29",
       unlock_invoice_id: opts.unlock === undefined ? INV : opts.unlock }],
     bk_gallery_items: [{ id: "it-1", gallery_id: G, project_id: P, storage_path: ORIG, filename: "Hide & Haunt Commercial.mp4", sort: 1, created_at: "2026-10-29" }],
-    bk_invoices: [{ id: INV, project_id: P, title: "Final balance", amount_cents: 75000, status }],
+    bk_invoices: [{ id: INV, project_id: opts.invProject ?? P, title: "Final balance", amount_cents: 75000, status }],
     profiles: [{ id: "staff-uid", role: "admin" }],
   }, [ORIG, ...(opts.preview === false ? [] : [PREV])]);
 }
@@ -42,7 +42,8 @@ let r = await list({ project_id: P, token: "tok" });
 let g = gallery(r.json), it = g?.items?.[0];
 ok(r.status === 200, "list ok");
 ok(g.held === true, "gallery is held while the balance is unpaid");
-ok(g.unlock && g.unlock.invoice_id === INV && g.unlock.amount_cents === 75000 && g.unlock.paid === false, "unlock names the invoice and amount");
+ok(g.unlock && g.unlock.invoice_id === INV && g.unlock.amount_cents === 75000 && g.unlock.paid === false && g.unlock.payable === true, "unlock names the invoice and amount, payable");
+ok(it.thumb_url === null && !fake.signed.includes(`${P}/${G}/thumbs/abc-hide-and-haunt-commercial.mp4`), "held thumbs are looked up next to the preview, not the original");
 ok(it.url && it.url.includes("/preview/"), "client streams the preview: " + it.url);
 ok(it.download_url === null, "no download link while held");
 ok(!JSON.stringify(r.json).includes(`sign/${ORIG}`), "the original path is never signed for the client");
@@ -60,6 +61,14 @@ ok(!fake.signed.includes(ORIG), "missing preview never falls back to signing the
 seed("void");
 r = await list({ project_id: P, token: "tok" });
 ok(gallery(r.json).held === true && gallery(r.json).items[0].download_url === null, "a void invoice does not unlock the video");
+ok(gallery(r.json).unlock.payable === false, "a void invoice is not offered for payment");
+
+// 3b. a paid invoice from another project neither unlocks it nor shows up
+seed("paid", { invProject: "someone-else" });
+fake.signed.length = 0;
+r = await list({ project_id: P, token: "tok" });
+g = gallery(r.json);
+ok(g.held === true && g.unlock === null && g.items[0].download_url === null && !fake.signed.includes(ORIG), "another project's paid invoice doesn't unlock it");
 
 // 4. paid: the original and a named download come back
 seed("paid");

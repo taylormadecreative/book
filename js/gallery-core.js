@@ -20,7 +20,8 @@
  *   Held video (gallery.held, set by bk-media): the video waits on a balance (gallery.unlock). It plays a
  *     watermarked preview with no download and, in v2, a Pay button (data-pay, handled by the page).
  *     mount() returns unlock = { invoiceId, held } for a video with a balance, so the page can name the
- *     payment and mount again once that invoice is paid.
+ *     payment and mount again (opts.quiet: no skeleton) once that invoice is paid. Between checkout and
+ *     the payment landing, the page sets .is-waiting on .g-unlock to swap the Pay button for a status line.
  */
 (function () {
   const esc = (s) =>
@@ -384,7 +385,7 @@
     if (V2) {
       const n = g.items.length, s = (w) => (n === 1 ? w : w + "s");
       const h = ctx.mode === "extras" ? "Add extra edits"
-        : g.kind === "final" ? "Final photos" : g.kind === "video" ? (n > 1 ? "Final videos" : "Final video")
+        : g.kind === "final" ? "Final photos" : g.kind === "video" ? (g.held ? (n > 1 ? "Your videos" : "Your video") : n > 1 ? "Final videos" : "Final video")
         : g.picksOnly ? "Your picks" : g.locked ? "Your proofs" : "Pick your favorites";
       const sub = ctx.mode === "extras" ? `${g.title} · ${n} more ${s("photo")} to choose from`
         : !n ? g.title
@@ -425,19 +426,22 @@
           card.classList.add("is-held");
           const u = g.unlock;
           const amt = u ? money(u.amount_cents) : "";
+          const name = (V2 ? shown(it) : it.filename) || "Video";
           card.innerHTML = `
           ${it.url
-            ? `<video controls controlslist="nodownload noremoteplayback" disablepictureinpicture disableremoteplayback playsinline preload="metadata" src="${esc(it.url)}"></video>`
+            ? `<video controls controlslist="nodownload noremoteplayback" disablepictureinpicture disableremoteplayback playsinline preload="metadata" src="${esc(it.url)}" aria-label="${esc(`Watermarked preview: ${name}`)}"></video>`
             : `<div class="g-vwait"><span>Your preview is on its way. Refresh in a minute.</span></div>`}
           <div class="g-cap">
-            <span class="g-fn">${esc((V2 ? shown(it) : it.filename) || "Video")}</span>
-            <span class="g-vtag">Preview</span>
+            <span class="g-fn">${esc(name)}</span>
+            <span class="chip chip-due g-vtag">Preview</span>
           </div>
           <div class="g-unlock">
-            <p>${u
-              ? `This is a watermarked preview. Pay your ${esc(amt)} balance and the full-quality video replaces it right here, ready to download.`
-              : "This is a watermarked preview. Your download unlocks once your balance is paid."}</p>
-            ${u && V2 ? `<button class="btn btn-gold btn-lg" type="button" data-pay="${esc(u.invoice_id)}"><span class="label">Pay ${esc(amt)} to download</span></button>` : ""}
+            <p class="g-unlock-ask">${u && u.payable && V2
+              ? "Watch it as often as you like. When you're happy with it, pay your final balance and the clean file replaces this preview, ready to download."
+              : u && u.payable ? "Watch it as often as you like. The clean file replaces this preview, ready to download, once your final balance is paid."
+              : "Watch it as often as you like. Nelson will send your final balance, and the clean file replaces this preview once it's paid."}</p>
+            ${u && u.payable && V2 ? `<button class="btn btn-gold btn-lg" type="button" data-pay="${esc(u.invoice_id)}"><span class="label" aria-live="polite">Pay ${esc(amt)} and download</span></button>
+            <p class="g-unlock-wait">Payment received. Your clean file will be here in a few seconds.</p>` : ""}
           </div>`;
           const v = card.querySelector("video");
           if (v) v.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -445,7 +449,7 @@
           return;
         }
         card.innerHTML = V2 ? `
-          <video controls preload="metadata" playsinline src="${esc(it.url)}"></video>
+          <video controls preload="metadata" playsinline src="${esc(it.url)}" aria-label="${esc(shown(it) || "Video")}"></video>
           <div class="g-cap">
             <span class="g-fn">${esc(shown(it) || "Video")}</span>
             <a class="g-save" href="${esc(it.download_url || it.url)}">${ICON.download}<span>Download</span></a>
@@ -1280,14 +1284,15 @@
   async function mount(container, access, opts = {}) {
     V2 = !!opts.v2;
     const none = { openProof: false, delivered: false, picksSent: false, finals: null, videos: 0, proof: null, storyboard: null, unlock: null };
-    container.innerHTML = V2
+    // opts.quiet (a remount, e.g. a video unlocking): keep what's on screen until the new list is in
+    if (!opts.quiet) container.innerHTML = V2
       ? `<div class="g-skel" aria-hidden="true"><i></i><i></i><i></i></div>`
       : `<div class="g-loading hud">LOADING YOUR MEDIA…</div>`;
     let data;
     try {
       data = await call(access, { action: "list" });
     } catch (_) {
-      container.innerHTML = `<p class="g-empty">Couldn't load your ${V2 ? "photos" : "media"} right now. Refresh to try again.</p>`;
+      if (!opts.quiet) container.innerHTML = `<p class="g-empty">Couldn't load your ${V2 ? "photos" : "media"} right now. Refresh to try again.</p>`;
       return { ...none, error: true };
     }
     let signedAt = Date.now();

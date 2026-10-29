@@ -7,6 +7,10 @@
 -- restrict, not set null: deleting the invoice must never quietly unlock the video
 alter table public.bk_galleries
   add column if not exists unlock_invoice_id uuid references public.bk_invoices(id) on delete restrict;
+-- a hold is for a video (photo finals have their own zip + download flow)
+alter table public.bk_galleries drop constraint if exists bk_galleries_unlock_video_only;
+alter table public.bk_galleries
+  add constraint bk_galleries_unlock_video_only check (unlock_invoice_id is null or kind = 'video');
 
 -- the balance that unlocks a video goes out with Nelson's own portal message, not the "quote is ready" email
 create or replace function public.bk_on_invoice_sent()

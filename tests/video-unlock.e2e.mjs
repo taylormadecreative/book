@@ -24,6 +24,9 @@ const NAME = "Delilah Amaro";
 const S = {
   held: () => ({ file: "Hide & Haunt Commercial.mp4" }),
   slow: () => ({ file: "Hide & Haunt Commercial.mp4", slow: true }),
+  gap: () => ({ file: "Hide & Haunt Commercial.mp4", slow: true, slowMs: 15000 }),
+  twice: () => ({ file: "Hide & Haunt Commercial.mp4", alreadyPaid: true }),
+  playing: () => ({ file: "Hide & Haunt Commercial.mp4" }),
   nopreview: () => ({ file: "Hide & Haunt Commercial.mp4", noPreview: true }),
   evil: () => ({ file: "<img src=x onerror=window.pwned=1>.mp4" }),
 };
@@ -46,7 +49,7 @@ function galleries(s) {
   const paid = s.inv[0].status === "paid", inv = s.inv[0].id;
   const name = s.file;
   return [{ id: "gv", kind: "video", title: "Hide & Haunt commercial", locked: false, selection_limit: null,
-    held: !paid, unlock: { invoice_id: inv, title: "Final balance", amount_cents: 75000, paid },
+    held: !paid, unlock: { invoice_id: inv, title: "Final balance", amount_cents: 75000, paid, payable: s.inv[0].status === "sent" },
     items: [{ id: "v1", gallery_id: "gv", filename: name, size_bytes: 46855519, sort: 1, selected: false, thumb_url: null,
       url: paid ? "https://img.test/full/clean.mp4" : s.noPreview ? null : "https://img.test/full/preview/clip.mp4",
       download_url: paid ? `https://img.test/full/clean.mp4?download=${encodeURIComponent(name)}` : null }] }];
@@ -55,7 +58,7 @@ const calls = [];
 
 async function wire(page, errors) {
   page.on("pageerror", (e) => errors.push(String(e)));
-  page.on("console", (m) => { if (m.type() === "error" && !/favicon|net::ERR|status of 40[03]|MEDIA_ERR|NotSupportedError|no supported source/i.test(m.text())) errors.push(m.text()); });
+  page.on("console", (m) => { if (m.type() === "error" && !/favicon|net::ERR|status of 40[039]|MEDIA_ERR|NotSupportedError|no supported source/i.test(m.text())) errors.push(m.text()); });
   await page.route("https://img.test/**", (route) => {
     const path = new URL(route.request().url()).pathname;
     const real = path.includes("/preview/") ? process.env.PORTAL_VIDEO_PREVIEW : process.env.PORTAL_VIDEO_CLEAN;
@@ -81,7 +84,9 @@ async function wire(page, errors) {
       const pid = Object.keys(state).find((k) => state[k].inv.some((i) => i.id === body.invoice_id));
       const s = state[pid];
       const markPaid = () => { s.inv[0].status = "paid"; s.inv[0].paid_at = new Date().toISOString(); };
-      if (s.slow) setTimeout(markPaid, 2500); else markPaid();
+      // a second tap after the payment went through (the server refuses with already_paid)
+      if (s.alreadyPaid) { markPaid(); return route.fulfill({ status: 409, json: { error: "already_paid" } }); }
+      if (s.slow) setTimeout(markPaid, s.slowMs || 2500); else markPaid();
       return route.fulfill({ json: { url: `${BASE}/portal.html?p=${pid}&t=tok&paid=1` } });
     }
     const s = body.token === "tok" ? get(body.project_id) : null;
@@ -103,8 +108,10 @@ const showFrame = (page) => page.evaluate(() => Promise.all([...document.querySe
 
 async function heldChecks(page, label, inv = "inv-held") {
   ok((await text(page, "#headline")) === "Your video is ready.", `${label}: headline`);
-  ok((await text(page, "#heroCta .hero-note")).startsWith("Watermarked preview"), `${label}: hero says it's a preview`);
-  ok((await text(page, "#heroCta .hero-pay")) === "Pay $750.00 · Final balance", `${label}: hero balance button`);
+  ok((await text(page, "#heroCta .hero-note")) === "Preview now · clean download with your final payment", `${label}: hero says it's a preview`);
+  ok((await page.locator("#heroCta .btn-gold use").getAttribute("href")) === "#i-play", `${label}: watch button has a play icon, not a download arrow`);
+  ok((await text(page, "#heroCta .hero-pay")) === "Pay $750.00 and download", `${label}: hero balance button names what it buys`);
+  ok((await text(page, ".g-block[data-kind='video'] .g-h")) === "Your video", `${label}: heading isn't "Final" while it's a preview`);
   ok((await page.locator(".g-video.is-held").count()) === 1, `${label}: held card`);
   ok((await page.locator(".g-video video").getAttribute("src")).includes("/preview/"), `${label}: plays the preview`);
   ok((await page.locator(".g-video .g-save, .g-video a[download], .g-video a[href*='download='], .g-dl").count()) === 0, `${label}: no download anywhere on the card`);
@@ -112,10 +119,12 @@ async function heldChecks(page, label, inv = "inv-held") {
   ok(/nodownload/.test(await v.getAttribute("controlslist")), `${label}: controls without a download item`);
   ok((await v.getAttribute("disablepictureinpicture")) !== null, `${label}: no picture-in-picture`);
   ok(await v.evaluate((el) => !el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }))), `${label}: right-click menu blocked on the video`);
-  ok((await text(page, ".g-vtag")) === "Preview", `${label}: Preview tag`);
-  ok((await text(page, ".g-unlock .btn")) === "Pay $750.00 to download", `${label}: unlock button label`);
+  ok((await v.getAttribute("aria-label")) === "Watermarked preview: Hide & Haunt Commercial.mp4" || label === "evil", `${label}: the player has a name`);
+  ok((await text(page, ".g-vtag")) === "Preview" && (await page.locator(".g-vtag.chip-due").count()) === 1, `${label}: Preview chip`);
+  ok((await text(page, ".g-unlock .btn")) === "Pay $750.00 and download", `${label}: unlock button label`);
   ok((await page.locator(".g-unlock .btn").getAttribute("data-pay")) === inv, `${label}: unlock button pays the balance invoice`);
-  ok((await text(page, ".g-unlock p")).includes("$750.00 balance"), `${label}: unlock copy names the balance`);
+  ok(/final balance/.test(await text(page, ".g-unlock-ask")) && !/\$/.test(await text(page, ".g-unlock-ask")), `${label}: unlock copy names the balance once (the price is on the button)`);
+  ok(await page.locator(".g-unlock-wait").isHidden(), `${label}: no "payment received" line before paying`);
 }
 
 try {
@@ -143,12 +152,15 @@ try {
   const co = calls.filter((c) => c.fn === "bk-create-checkout").pop();
   ok(co && co.body.invoice_id === "inv-held" && co.body.token === "tok", "checkout opened for the balance invoice");
   ok(!(await page.locator("#paidBanner").isHidden()), "payment banner shows");
-  ok((await text(page, "#paidText")).startsWith("Payment received. Your full-quality video unlocks below"), "banner talks about the video: " + await text(page, "#paidText"));
+  ok((await text(page, "#paidText")).startsWith("Payment received, thank you. Your final video is below, ready to download"), "banner talks about the video: " + await text(page, "#paidText"));
   ok((await page.locator(".g-video.is-held").count()) === 0, "unlocked: no preview card");
   ok((await page.locator(".g-video video").getAttribute("src")).endsWith("/clean.mp4"), "unlocked: plays the original");
   ok((await page.locator(".g-video .g-save").getAttribute("href")).includes("download="), "unlocked: Download link");
   ok((await page.locator("#heroCta .hero-pay").count()) === 0, "unlocked: nothing left to pay in the hero");
   ok((await text(page, "#heroCta .hero-note")) === "1 video", "unlocked: hero note back to normal");
+  ok((await text(page, ".g-block[data-kind='video'] .g-h")) === "Final video", "unlocked: heading says Final video");
+  const [vw, lw] = await page.evaluate(() => [document.querySelector(".g-video").getBoundingClientRect().width, document.querySelector(".g-videos").getBoundingClientRect().width]);
+  ok(Math.abs(vw - lw) < 2, `unlocked: the paid video keeps the full width (${Math.round(vw)} of ${Math.round(lw)})`);
 
   /* --- webhook a moment late: the page unlocks itself on the next poll --- */
   await page.goto(url("p-slow"));
@@ -157,13 +169,50 @@ try {
   await page.waitForURL(/paid=1|p=p-slow&t=tok$/);
   await ready(page);
   ok((await page.locator(".g-video.is-held").count()) === 1, "late webhook: still the preview on return");
-  ok((await text(page, "#paidText")).startsWith("Payment received. Your full-quality video unlocks below"), "late webhook: banner still names the video");
-  ok((await page.locator("#heroCta .hero-pay").count()) === 0, "late webhook: no second Pay while it's processing");
+  ok((await text(page, "#paidText")).includes("will be ready to download below in a few seconds"), "late webhook: banner says it's on its way: " + await text(page, "#paidText"));
+  ok((await page.locator("#heroCta .hero-pay").count()) === 0, "late webhook: no second Pay in the hero while it's processing");
+  ok(await page.locator(".g-unlock .btn").isHidden(), "late webhook: the card doesn't offer the same payment again");
+  ok((await page.locator(".g-unlock-wait").isVisible()) && /Payment received/.test(await text(page, ".g-unlock-wait")), "late webhook: the card says the payment is in");
+  ok((await text(page, "#heroCta .hero-note")) === "Payment received · your download is on its way", "late webhook: hero note says it's on its way");
+  // the swap is quiet: no loading skeleton flashes in while it happens
+  await page.evaluate(() => { window.__skel = 0; new MutationObserver(() => { if (document.querySelector("#galleryRoot .g-skel")) window.__skel++; }).observe(document.querySelector("#galleryRoot"), { childList: true, subtree: true }); });
   await page.waitForSelector(".g-video .g-save", { timeout: 16000 }).catch(() => {});
   ok((await page.locator(".g-video .g-save").count()) === 1 && (await page.locator(".g-video.is-held").count()) === 0, "late webhook: unlocks on the next poll without a reload");
+  ok((await page.evaluate(() => window.__skel)) === 0, "late webhook: no skeleton flash during the swap");
+  ok((await text(page, "#paidText")) === "Payment received, thank you. Your final video is ready to download below.", "late webhook: the status line announces the unlock");
   const lists = calls.filter((c) => c.fn === "bk-media" && c.body.project_id === "p-slow").length;
   await page.waitForTimeout(10500);
   ok(calls.filter((c) => c.fn === "bk-media" && c.body.project_id === "p-slow").length === lists, "after unlocking, the poll stops mounting the gallery again");
+
+  /* --- a reload in the gap still knows the payment is in --- */
+  await page.goto(url("p-gap"));
+  await ready(page);
+  await page.click(".g-unlock .btn");
+  await page.waitForURL(/paid=1|p=p-gap&t=tok$/);
+  await ready(page);
+  await page.reload();
+  await ready(page);
+  ok(!page.url().includes("paid=1"), "reload: the paid flag is gone from the address");
+  ok(await page.locator(".g-unlock .btn").isHidden(), "reload in the gap: still no second Pay on the card");
+  ok((await page.locator("#heroCta .hero-pay").count()) === 0, "reload in the gap: still no second Pay in the hero");
+
+  /* --- a second tap after the payment already went through --- */
+  await page.goto(url("p-twice"));
+  await ready(page);
+  await page.click(".g-unlock .btn");
+  await page.waitForSelector(".g-video .g-save", { timeout: 8000 }).catch(() => {});
+  ok((await page.locator(".g-video .g-save").count()) === 1, "already paid: the page catches up and unlocks instead of saying Try again");
+
+  /* --- never cut off the preview mid-play --- */
+  await page.goto(url("p-playing"));
+  await ready(page);
+  await page.evaluate(() => { const v = document.querySelector(".g-video video"); Object.defineProperty(v, "paused", { configurable: true, get: () => false }); });
+  state["p-playing"].inv[0].status = "paid";
+  await page.waitForTimeout(11000);
+  ok((await page.locator(".g-video.is-held").count()) === 1, "playing: the preview keeps playing after the payment lands");
+  await page.evaluate(() => { const v = document.querySelector(".g-video video"); Object.defineProperty(v, "paused", { configurable: true, get: () => true }); v.dispatchEvent(new Event("pause")); });
+  await page.waitForSelector(".g-video .g-save", { timeout: 5000 }).catch(() => {});
+  ok((await page.locator(".g-video .g-save").count()) === 1, "playing: it unlocks as soon as she pauses");
 
   /* --- preview not uploaded yet: a note, never a blank player --- */
   await page.goto(url("p-nopreview"));
@@ -183,7 +232,7 @@ try {
   delete state["p-held"];
   await pp.goto(url("p-held"));
   await ready(pp);
-  await heldChecks(pp, "phone");
+  await heldChecks(pp, "phone", "inv-held");
   ok((await overflow(pp)) <= 0, "phone: no sideways scroll");
   const [bw, cw] = await pp.evaluate(() => [document.querySelector(".g-unlock .btn").getBoundingClientRect().width, document.querySelector(".g-unlock").getBoundingClientRect().width]);
   ok(cw - bw < 45, `phone: unlock button spans the card (${Math.round(bw)} of ${Math.round(cw)})`);

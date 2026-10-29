@@ -86,7 +86,7 @@ async function signItems(db: ReturnType<typeof svc>, items: any[], kindByGallery
       id: it.id, gallery_id: it.gallery_id, filename: it.filename, content_type: it.content_type,
       size_bytes: it.size_bytes, sort: it.sort, selected: it.selected,
       meta: it.meta || {}, client_note: it.client_note ?? null,
-      url: inlineBy.get(paths[i]) ?? null, thumb_url: thumbBy.get(thumbPath(it.storage_path)) ?? null, download_url,
+      url: inlineBy.get(paths[i]) ?? null, thumb_url: thumbBy.get(thumbPath(paths[i])) ?? null, download_url,
     };
   }));
 }
@@ -133,12 +133,17 @@ Deno.serve(async (req: Request) => {
       const invById = new Map<string, any>();
       if (unlockIds.length) {
         const { data: invs, error } = await db.from("bk_invoices")
-          .select("id, title, amount_cents, status").in("id", unlockIds);
+          .select("id, project_id, title, amount_cents, status").in("id", unlockIds);
         if (error) throw new Error(error.message); // fail closed: no list beats an unlocked video
         for (const inv of invs || []) invById.set(inv.id, inv);
       }
+      // only the gallery's own project's invoice counts; anything else keeps it held with nothing to pay
+      const unlockOf = (g: any) => {
+        const inv = g.unlock_invoice_id ? invById.get(g.unlock_invoice_id) : null;
+        return inv && inv.project_id === g.project_id ? inv : null;
+      };
       const held = new Set<string>((galleries || [])
-        .filter((g: any) => !access.staff && g.unlock_invoice_id && invById.get(g.unlock_invoice_id)?.status !== "paid")
+        .filter((g: any) => !access.staff && g.unlock_invoice_id && unlockOf(g)?.status !== "paid")
         .map((g: any) => g.id));
       const signed = await signItems(db, items || [], kindByGallery, held);
       const byGallery: Record<string, any[]> = {};
@@ -156,8 +161,9 @@ Deno.serve(async (req: Request) => {
           purpose: g.purpose ?? null,
           // held = the client is watching the preview; unlock = the invoice that releases the original
           held: held.has(g.id),
-          unlock: g.unlock_invoice_id && invById.has(g.unlock_invoice_id) ? (({ id, title, amount_cents, status }) =>
-            ({ invoice_id: id, title, amount_cents, paid: status === "paid" }))(invById.get(g.unlock_invoice_id)) : null,
+          // payable = it can go through checkout now (a draft or void invoice can't)
+          unlock: unlockOf(g) ? (({ id, title, amount_cents, status }) =>
+            ({ invoice_id: id, title, amount_cents, paid: status === "paid", payable: status === "sent" }))(unlockOf(g)) : null,
           items: byGallery[g.id] || [],
         })),
       }));
