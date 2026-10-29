@@ -56,13 +56,17 @@ async function resolveAccess(req: Request, body: any, db: ReturnType<typeof svc>
 // Grid thumbnails live next to the original under a thumbs/ folder (same file name).
 // Older uploads have none; the client falls back to the full image.
 const thumbPath = (p: string) => p.replace(/([^/]+)$/, "thumbs/$1");
+// A video held until its balance is paid plays a watermarked copy kept under preview/ (same file name).
+const previewPath = (p: string) => p.replace(/([^/]+)$/, "preview/$1");
 
 // Batch-sign: one storage call for every inline URL and one for every thumb,
 // instead of one call per item (a 400-photo proofing gallery would be 800+ calls).
-async function signItems(db: ReturnType<typeof svc>, items: any[], kindByGallery: Record<string, string>) {
+// Items in a held gallery sign only their preview: the original never leaves storage before it's paid,
+// and a missing preview comes back as no link at all, never the original.
+async function signItems(db: ReturnType<typeof svc>, items: any[], kindByGallery: Record<string, string>, held: Set<string>) {
   if (!items.length) return [];
   const bucket = db.storage.from(BUCKET);
-  const paths = items.map((it) => it.storage_path);
+  const paths = items.map((it) => held.has(it.gallery_id) ? previewPath(it.storage_path) : it.storage_path);
   const [inline, thumbs] = await Promise.all([
     bucket.createSignedUrls(paths, SIGN_TTL),
     bucket.createSignedUrls(paths.map(thumbPath), SIGN_TTL),
@@ -70,11 +74,11 @@ async function signItems(db: ReturnType<typeof svc>, items: any[], kindByGallery
   // match results by path (missing thumbs come back as per-path errors, not a failed batch)
   const byPath = (r: any) => new Map<string, string | null>((r.data || []).map((d: any) => [d.path, d.signedUrl || null]));
   const inlineBy = byPath(inline), thumbBy = byPath(thumbs);
-  return Promise.all(items.map(async (it) => {
+  return Promise.all(items.map(async (it, i) => {
     // proofs are for picking and storyboards are for reviewing (the frames are Nelson's); finals + video keep a named download link
     let download_url: string | null = null;
     const kind = kindByGallery[it.gallery_id];
-    if (kind === "final" || kind === "video") {
+    if ((kind === "final" || kind === "video") && !held.has(it.gallery_id)) {
       const dl = await bucket.createSignedUrl(it.storage_path, SIGN_TTL, { download: it.filename || "download" });
       download_url = dl.data?.signedUrl || null;
     }
@@ -82,7 +86,7 @@ async function signItems(db: ReturnType<typeof svc>, items: any[], kindByGallery
       id: it.id, gallery_id: it.gallery_id, filename: it.filename, content_type: it.content_type,
       size_bytes: it.size_bytes, sort: it.sort, selected: it.selected,
       meta: it.meta || {}, client_note: it.client_note ?? null,
-      url: inlineBy.get(it.storage_path) ?? null, thumb_url: thumbBy.get(thumbPath(it.storage_path)) ?? null, download_url,
+      url: inlineBy.get(paths[i]) ?? null, thumb_url: thumbBy.get(thumbPath(it.storage_path)) ?? null, download_url,
     };
   }));
 }
@@ -123,7 +127,20 @@ Deno.serve(async (req: Request) => {
         .in("project_id", pids).order("sort").order("created_at");
       const kindByGallery: Record<string, string> = {};
       for (const g of galleries || []) kindByGallery[g.id] = g.kind;
-      const signed = await signItems(db, items || [], kindByGallery);
+      // a video waiting on its balance: the client gets the watermarked preview until that invoice is paid
+      // (staff always see the original)
+      const unlockIds = [...new Set((galleries || []).map((g: any) => g.unlock_invoice_id).filter(Boolean))];
+      const invById = new Map<string, any>();
+      if (unlockIds.length) {
+        const { data: invs, error } = await db.from("bk_invoices")
+          .select("id, title, amount_cents, status").in("id", unlockIds);
+        if (error) throw new Error(error.message); // fail closed: no list beats an unlocked video
+        for (const inv of invs || []) invById.set(inv.id, inv);
+      }
+      const held = new Set<string>((galleries || [])
+        .filter((g: any) => !access.staff && g.unlock_invoice_id && invById.get(g.unlock_invoice_id)?.status !== "paid")
+        .map((g: any) => g.id));
+      const signed = await signItems(db, items || [], kindByGallery, held);
       const byGallery: Record<string, any[]> = {};
       for (const s of signed) (byGallery[s.gallery_id] ||= []).push(s);
 
@@ -137,6 +154,10 @@ Deno.serve(async (req: Request) => {
           id: g.id, kind: g.kind, title: g.title, selection_limit: g.selection_limit, locked: g.locked,
           review_outcome: g.review_outcome ?? null, reviewed_at: g.reviewed_at ?? null, pay_url: g.pay_url ?? null,
           purpose: g.purpose ?? null,
+          // held = the client is watching the preview; unlock = the invoice that releases the original
+          held: held.has(g.id),
+          unlock: g.unlock_invoice_id && invById.has(g.unlock_invoice_id) ? (({ id, title, amount_cents, status }) =>
+            ({ invoice_id: id, title, amount_cents, paid: status === "paid" }))(invById.get(g.unlock_invoice_id)) : null,
           items: byGallery[g.id] || [],
         })),
       }));

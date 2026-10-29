@@ -2,7 +2,7 @@
  * Used by both the token portal (portal.html) and the logged-in hub (gallery.html).
  * Talks only to the bk-media edge function; no direct DB/storage access.
  *
- *   BKGallery.mount(containerEl, access, opts?) → Promise<{ openProof, delivered, picksSent, finals, videos, proof }>
+ *   BKGallery.mount(containerEl, access, opts?) → Promise<{ openProof, delivered, picksSent, finals, videos, proof, unlock }>
  *     access = { mode:"token", project_id, token }
  *           | { mode:"session", jwt }        // Supabase access_token
  *     opts.v2 = the 2026-10 client portal look (portal.html): section headings, captioned
@@ -17,10 +17,15 @@
  *     caption (item.meta) and an optional change note. One review either approves the storyboard or
  *     sends the notes to Nelson; it fires "bkgallery:reviewed" { outcome }. mount() also returns
  *     storyboard = { el, count, state: "open" | "approved" | "changes", notes }.
+ *   Held video (gallery.held, set by bk-media): the video waits on a balance (gallery.unlock). It plays a
+ *     watermarked preview with no download and, in v2, a Pay button (data-pay, handled by the page).
+ *     mount() returns unlock = { invoiceId, held } for a video with a balance, so the page can name the
+ *     payment and mount again once that invoice is paid.
  */
 (function () {
   const esc = (s) =>
     (s ?? "").toString().replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const money = (c) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
   const KIND_LABEL = { proof: "Proofing", final: "Edited photos", video: "Video" };
   const RESIGN_AFTER_MS = 90 * 60 * 1000; // signed URLs live 2h; refresh well before that
   // the zip helper for "Download all" loads on demand from js/vendor/, next to this file
@@ -415,6 +420,30 @@
       g.items.forEach((it) => {
         const card = document.createElement("div");
         card.className = "g-video";
+        if (g.held) {
+          // the watermarked preview: watch only until the balance is paid (the server sends no original and no download)
+          card.classList.add("is-held");
+          const u = g.unlock;
+          const amt = u ? money(u.amount_cents) : "";
+          card.innerHTML = `
+          ${it.url
+            ? `<video controls controlslist="nodownload noremoteplayback" disablepictureinpicture disableremoteplayback playsinline preload="metadata" src="${esc(it.url)}"></video>`
+            : `<div class="g-vwait"><span>Your preview is on its way. Refresh in a minute.</span></div>`}
+          <div class="g-cap">
+            <span class="g-fn">${esc((V2 ? shown(it) : it.filename) || "Video")}</span>
+            <span class="g-vtag">Preview</span>
+          </div>
+          <div class="g-unlock">
+            <p>${u
+              ? `This is a watermarked preview. Pay your ${esc(amt)} balance and the full-quality video replaces it right here, ready to download.`
+              : "This is a watermarked preview. Your download unlocks once your balance is paid."}</p>
+            ${u && V2 ? `<button class="btn btn-gold btn-lg" type="button" data-pay="${esc(u.invoice_id)}"><span class="label">Pay ${esc(amt)} to download</span></button>` : ""}
+          </div>`;
+          const v = card.querySelector("video");
+          if (v) v.addEventListener("contextmenu", (e) => e.preventDefault());
+          list.appendChild(card);
+          return;
+        }
         card.innerHTML = V2 ? `
           <video controls preload="metadata" playsinline src="${esc(it.url)}"></video>
           <div class="g-cap">
@@ -1250,7 +1279,7 @@
 
   async function mount(container, access, opts = {}) {
     V2 = !!opts.v2;
-    const none = { openProof: false, delivered: false, picksSent: false, finals: null, videos: 0, proof: null, storyboard: null };
+    const none = { openProof: false, delivered: false, picksSent: false, finals: null, videos: 0, proof: null, storyboard: null, unlock: null };
     container.innerHTML = V2
       ? `<div class="g-skel" aria-hidden="true"><i></i><i></i><i></i></div>`
       : `<div class="g-loading hud">LOADING YOUR MEDIA…</div>`;
@@ -1291,7 +1320,7 @@
       return none;
     }
     const multi = projects.length > 1;
-    let openProof = false, delivered = false, picksSent = false, videos = 0, proof = null, finalCtx = null, storyboard = null;
+    let openProof = false, delivered = false, picksSent = false, videos = 0, proof = null, finalCtx = null, storyboard = null, unlock = null;
     const finalItems = [];
     const deliverable = (g) => g.kind === "final" || g.kind === "video";
     // what they came for first: proofs waiting on picks or a storyboard to review, then edits + video,
@@ -1336,6 +1365,7 @@
         if (deliverable(g) && g.items.length) delivered = true;
         if (g.picksOnly) picksSent = true;
         if (g.kind === "video") videos += g.items.length;
+        if (g.kind === "video" && g.unlock && g.items.length && (!unlock || (g.held && !unlock.held))) unlock = { invoiceId: g.unlock.invoice_id, held: !!g.held };
         if (g.kind === "final") finalItems.push(...g.items);
         const block = galleryBlock(access, p, g, resign, stale, opts);
         if (g.kind === "proof" && !g.locked && g.items.length) {
@@ -1356,7 +1386,7 @@
         location.href = finalItems[0].download_url || finalItems[0].url;
       },
     } : null;
-    return { openProof, delivered, picksSent, finals, videos, proof, storyboard };
+    return { openProof, delivered, picksSent, finals, videos, proof, storyboard, unlock };
   }
 
   window.BKGallery = { mount };

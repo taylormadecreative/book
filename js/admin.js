@@ -465,6 +465,11 @@ function galleriesCard(p) {
           : g.locked ? `<span class="pill gold">${notes.length} change${notes.length === 1 ? "" : "s"} sent</span>`
           : `<span class="pill">${items.length} frames${notes.length ? ` · ${notes.length} note${notes.length === 1 ? "" : "s"}` : " · waiting on client"}</span>`)
         : `<span class="pill">${items.length} item${items.length === 1 ? "" : "s"}</span>`;
+    // a video held until its balance is paid: the client watches the watermarked preview until then
+    const unlockInv = g.unlock_invoice_id ? (p.bk_invoices || []).find((i) => i.id === g.unlock_invoice_id) : null;
+    const heldPill = !g.unlock_invoice_id ? ""
+      : unlockInv && unlockInv.status === "paid" ? `<span class="pill green">Paid · client can download</span>`
+      : `<span class="pill gold">Preview only until ${esc((unlockInv && unlockInv.title) || "the balance")} is paid</span>`;
     // a draft goes live with "Send to client" (no message is sent; that's yours to write). The latest
     // reviewed storyboard can reopen for another round (her notes stay on the frames until she clears them)
     const lockBtn = g.kind === "proof" || (isBoard && isDraft(g) && items.length) || (isBoard && g.locked && g === latestOf[g.purpose || "storyboard"])
@@ -521,7 +526,7 @@ function galleriesCard(p) {
       <div class="ga">
         <div class="ga-head">
           <div><span class="hud">${g.purpose === "location" ? "Location" : GAL_KIND[g.kind] || g.kind}</span><b>${esc(g.title)}</b></div>
-          <div class="ga-meta">${meta}${copyBtn}${lockBtn}<button class="ga-del" data-galdel="${g.id}" title="Delete gallery">&#10005;</button></div>
+          <div class="ga-meta">${meta}${heldPill}${copyBtn}${lockBtn}<button class="ga-del" data-galdel="${g.id}" title="Delete gallery">&#10005;</button></div>
         </div>
         ${body}
         <div class="ga-prog" data-prog="${g.id}" hidden></div>
@@ -549,6 +554,8 @@ function galleriesCard(p) {
 
 // Grid thumbnails sit next to the original under thumbs/ (same name); older uploads have none.
 const thumbPath = (path) => path.replace(/([^/]+)$/, "thumbs/$1");
+// a held video's watermarked copy (bk-media streams it to the client until the balance is paid)
+const previewPath = (path) => path.replace(/([^/]+)$/, "preview/$1");
 
 // The detail pane re-renders on every 15s poll. Re-signing each time would hand the browser
 // brand-new URLs and re-download every photo, so keep each signed URL for most of its hour.
@@ -755,7 +762,7 @@ function wireDetail(p) {
     // on a phone the × is always showing, so a stray tap needs a check
     if (coarse() && !confirm("Remove this file from the gallery?")) return;
     const cell = b.closest("[data-path]");
-    if (cell) await sb.storage.from("project-media").remove([cell.dataset.path, thumbPath(cell.dataset.path)]);
+    if (cell) await sb.storage.from("project-media").remove([cell.dataset.path, thumbPath(cell.dataset.path), previewPath(cell.dataset.path)]);
     await sb.from("bk_gallery_items").delete().eq("id", b.dataset.itemdel);
     await load();
   }));
@@ -805,7 +812,7 @@ function wireDetail(p) {
     const gid = b.dataset.galdel;
     const gal = (p.bk_galleries || []).find((g) => g.id === gid);
     if (!confirm(`Delete "${gal?.title || "this gallery"}" and all its media? This cannot be undone.`)) return;
-    const paths = (gal?.bk_gallery_items || []).flatMap((i) => [i.storage_path, thumbPath(i.storage_path)]);
+    const paths = (gal?.bk_gallery_items || []).flatMap((i) => [i.storage_path, thumbPath(i.storage_path), previewPath(i.storage_path)]);
     if (paths.length) await sb.storage.from("project-media").remove(paths);
     await sb.from("bk_galleries").delete().eq("id", gid); // cascades item rows
     toast("Gallery deleted");

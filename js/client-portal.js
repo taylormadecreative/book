@@ -31,6 +31,7 @@ const TABS = ["photos", "details", "messages", "invoices"];
 let data = null;   // last bk_portal payload
 let media = null;  // what BKGallery.mount found
 let heroKey = "", lastMsgKey = "", lastCtKey = null, lastInvKey = null, lastFilesKey = null;
+let extrasCents = Promise.resolve(0), remounting = false;
 
 // browser storage is a convenience only (private mode can refuse it)
 const store = {
@@ -99,11 +100,8 @@ async function init() {
     renderHero();
   });
   // the per-photo price comes from the studio's settings; no price, no extras offer
-  const cents = BK.rpc("bk_extra_edit_cents").then(Number).catch(() => 0);
-  const mounting = window.BKGallery
-    ? cents.then((c) => BKGallery.mount(root, { mode: "token", project_id: PID, token: TOKEN },
-        { v2: true, displayName, emptyHTML: emptyPhotos, extras: c > 0 ? { cents: c, request: requestExtras } : null })).catch(() => null)
-    : Promise.resolve(null);
+  extrasCents = BK.rpc("bk_extra_edit_cents").then(Number).catch(() => 0);
+  const mounting = mountGallery();
   try {
     data = await BK.rpc("bk_portal", { p_project: PID, p_token: TOKEN });
   } catch (err) {
@@ -115,6 +113,7 @@ async function init() {
   storyboardTab();
   paidBanner();
   render();
+  unlockVideo();
   $("#loading").hidden = true;
   $("#app").hidden = false;
   $("#barRight").hidden = false;
@@ -129,12 +128,33 @@ function fail(kind) {
 }
 $("#retry").addEventListener("click", () => location.reload());
 
+function mountGallery() {
+  if (!window.BKGallery) return Promise.resolve(null);
+  return extrasCents.then((c) => BKGallery.mount($("#galleryRoot"), { mode: "token", project_id: PID, token: TOKEN },
+    { v2: true, displayName, emptyHTML: emptyPhotos, extras: c > 0 ? { cents: c, request: requestExtras } : null })).catch(() => null);
+}
+
 async function refresh() {
   if (document.hidden) return;
   try {
     const next = await BK.rpc("bk_portal", { p_project: PID, p_token: TOKEN });
-    if (next && next.project) { data = next; render(); }
+    if (next && next.project) { data = next; render(); unlockVideo(); }
   } catch (_) { /* transient; keep the last view */ }
+}
+
+// a held video unlocks once its balance is paid (often a few seconds after checkout sends them back):
+// mount the gallery again so the full-quality file and its Download replace the preview
+async function unlockVideo() {
+  const u = media && media.unlock;
+  if (!u || !u.held || remounting) return;
+  if (!(data.invoices || []).some((i) => i.id === u.invoiceId && i.status === "paid")) return;
+  remounting = true;
+  const next = await mountGallery();
+  remounting = false;
+  if (!next) return;
+  media = next;
+  heroKey = "";
+  render();
 }
 
 // gallery-core calls this when the project has no galleries yet
@@ -204,7 +224,9 @@ function renderHero() {
       const note = f.count > 1 ? `ZIP file${f.mb ? ` · ${f.mb} MB` : ""}` : `Full resolution${f.mb ? ` · ${f.mb} MB` : ""}`;
       cta = heroButton("download", f.count > 1 ? `Download all ${f.count} photos` : "Download your photo", note, 'data-act="download"');
     } else {
-      cta = heroButton("arrow-down", vids === 1 ? "Watch your video" : "Watch your videos", plural(vids, "video"), 'data-act="video"');
+      const held = media.unlock && media.unlock.held;
+      cta = heroButton("arrow-down", vids === 1 ? "Watch your video" : "Watch your videos",
+        held ? "Watermarked preview · download once your balance is paid" : plural(vids, "video"), 'data-act="video"');
     }
     // anything still owed (extra edits, a balance) sits right under the download, never hidden in a tab
     const due = unpaid()[0];
@@ -483,7 +505,9 @@ function storyboardTab() {
 function paidBanner() {
   if (!JUST_PAID) return;
   const inv = (data.invoices || []).find((i) => i.id === sessionStorage.getItem("bk_paying"));
-  $("#paidText").textContent = inv && isExtras(inv)
+  $("#paidText").textContent = inv && media && media.unlock && media.unlock.invoiceId === inv.id
+    ? "Payment received. Your full-quality video unlocks below, ready to download, and your receipt is on its way to your email."
+    : inv && isExtras(inv)
     ? "Payment received. Your extra edits are locked in, and your receipt is on its way to your email."
     : inv && inv.kind === "deposit" && noShoot(data.project)
     ? "Payment received. Your deposit is in, so production can start. Your receipt is on its way to your email."

@@ -628,6 +628,44 @@ ol, ul { padding: 0; list-style: none; }
 .g-videos { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); }
 .g-video { overflow: hidden; border-radius: var(--radius); background: var(--card); border: 1px solid var(--paper-line); }
 .g-video video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: var(--ink); }
+/* held until the balance is paid: the watermarked preview, a Preview tag, and the one way to the download */
+.g-video.is-held { grid-column: 1 / -1; }
+.g-video.is-held .g-cap { padding-right: 1.25rem; }
+.g-vtag {
+  flex: 0 0 auto;
+  padding: 0.3em 0.75em;
+  border-radius: 999px;
+  background: #f6ead0;
+  color: var(--gold-ink);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.g-unlock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 1.6rem;
+  padding: 1.05rem 1.25rem 1.2rem;
+  border-top: 1px solid var(--paper-line);
+}
+.g-unlock p { max-width: 52ch; color: var(--paper-muted); font-size: 1rem; line-height: 1.45; }
+.g-unlock .btn { flex: 0 0 auto; }
+.g-vwait {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  padding: 1.5rem;
+  background: var(--ink);
+  color: var(--on-ink-muted);
+  text-align: center;
+}
+@media (max-width: 640px) {
+  .g-unlock { flex-direction: column; align-items: stretch; }
+  .g-unlock .btn { width: 100%; }
+}
 
 /* toast */
 /* notes drop in under the top bar: the pick bar owns the bottom of the screen */
