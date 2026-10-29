@@ -1009,6 +1009,10 @@
       const k = sbNotes(g), ks = k === 1 ? "" : "s";
       const when = dayOf(g.reviewed_at);
       const ask = `<button class="sb-msg" type="button" data-open-messages>Message Nelson</button>`;
+      // once the video is delivered, the next steps below are done (the deposit was paid before production)
+      if (g.review_outcome === "approved" && g.delivered) {
+        return `<span class="g-sent">${ICON.check}${loc ? "Location" : "Storyboard"} approved${when ? ` · ${esc(when)}` : ""}</span>`;
+      }
       if (g.review_outcome === "approved" && loc) {
         return `<span class="g-sent">${ICON.check}Location approved${when ? ` · ${esc(when)}` : ""}</span><span class="g-selnote">Nelson is updating your storyboard in this building. It will show up here. Questions? ${ask}</span>`;
       }

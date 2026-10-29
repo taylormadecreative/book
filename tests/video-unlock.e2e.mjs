@@ -48,7 +48,12 @@ const get = (pid) => {
 function galleries(s) {
   const paid = s.inv[0].status === "paid", inv = s.inv[0].id;
   const name = s.file;
-  return [{ id: "gv", kind: "video", title: "Hide & Haunt commercial", locked: false, selection_limit: null,
+  // her approved storyboard with its HoneyBook deposit link (paid before production)
+  const board = { id: "gsb", kind: "storyboard", title: "Hide & Haunt storyboard v3", locked: true, selection_limit: null, review_outcome: "approved",
+    reviewed_at: "2026-10-28T23:21:00Z", pay_url: "https://taylormadecreative.hbportal.co/flow/x", purpose: null,
+    items: [{ id: "f1", gallery_id: "gsb", filename: "1A.png", sort: 1, selected: false, thumb_url: null, url: "https://img.test/full/1A.png", download_url: null,
+      meta: { scene: 1, scene_title: "Arrival", code: "1A", tc: "0:00", action: "They walk up." }, client_note: null }] };
+  return [board, { id: "gv", kind: "video", title: "Hide & Haunt commercial", locked: false, selection_limit: null,
     held: !paid, unlock: { invoice_id: inv, title: "Final balance", amount_cents: 75000, paid, payable: s.inv[0].status === "sent" },
     items: [{ id: "v1", gallery_id: "gv", filename: name, size_bytes: 46855519, sort: 1, selected: false, thumb_url: null,
       url: paid ? "https://img.test/full/clean.mp4" : s.noPreview ? null : "https://img.test/full/preview/clip.mp4",
@@ -138,6 +143,8 @@ try {
   await page.goto(url("p-held"));
   await ready(page);
   await heldChecks(page, "desktop");
+  ok((await page.locator(".sb-pay").count()) === 0 && !/Next is your deposit/.test(await page.locator("#galleryRoot").innerText()), "the approved storyboard no longer asks for the deposit once the video is here");
+  ok(/Storyboard approved/.test(await page.locator("#galleryRoot").innerText()), "the storyboard still shows it was approved");
   ok((await text(page, ".g-fn")) === "Hide & Haunt Commercial.mp4", "file name shown");
   // the invoices tab lists the balance with its own Pay
   await page.click("#tab-invoices");
