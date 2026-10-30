@@ -251,14 +251,17 @@ function renderHero() {
     } else {
       const u = media.unlock && media.unlock.held ? media.unlock : null;
       const landing = u && (data.invoices || []).some((i) => i.id === u.invoiceId && (i.status === "paid" || processing(i)));
-      // a closed preview (she's seen it) has nothing to watch: the button takes her to the locked card
+      // a closed preview (she's seen it) has nothing to watch: paying is the one thing left, so it's the main button
       const shut = u && u.closed && !landing;
-      cta = heroButton(shut ? "lock" : u ? "play" : "arrow-down", shut ? (vids === 1 ? "Get your video" : "Get your videos") : vids === 1 ? "Watch your video" : "Watch your videos",
-        landing ? "Payment received · your download is on its way" : shut ? "Preview closed · download with your final payment"
-          : u ? "Preview now · clean download with your final payment" : plural(vids, "video"), 'data-act="video"');
+      const owed = shut && unpaid().find((i) => i.id === u.invoiceId);
+      cta = owed
+        ? heroButton("card", `Pay ${money(owed.amount_cents)} and download`, "Preview closed · your clean file downloads right after", `data-pay="${esc(owed.id)}"`)
+        : heroButton(shut ? "lock" : u ? "play" : "arrow-down", shut ? (vids === 1 ? "Get your video" : "Get your videos") : vids === 1 ? "Watch your video" : "Watch your videos",
+          landing ? "Payment received · your download is on its way" : shut ? "Preview closed · download with your final payment"
+            : u ? "Preview now · clean download with your final payment" : plural(vids, "video"), 'data-act="video"');
     }
     // anything still owed (extra edits, a balance) sits right under the download, never hidden in a tab
-    const due = unpaid()[0];
+    const due = unpaid().find((i) => !cta.includes(`data-pay="${esc(i.id)}"`));
     const unlocks = due && media.unlock && media.unlock.invoiceId === due.id;
     if (due) cta += `<button class="btn btn-line hero-pay" type="button" data-pay="${esc(due.id)}">${icon("card")}<span class="label" aria-live="polite">${unlocks ? `Pay ${money(due.amount_cents)} and download` : `Pay ${money(due.amount_cents)} · ${esc(due.title)}`}</span></button>`;
   } else if (st === "storyboard") {

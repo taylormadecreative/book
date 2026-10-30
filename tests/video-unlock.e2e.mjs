@@ -147,10 +147,10 @@ async function heldChecks(page, label, inv = "inv-held") {
 // a closed preview: nothing plays, a still under a lock, the same Pay
 async function closedChecks(page, label, inv = "inv-closed") {
   ok((await text(page, "#headline")) === "Your video is ready.", `${label}: headline`);
-  ok((await text(page, "#heroCta .hero-note")) === "Preview closed · download with your final payment", `${label}: hero says the preview is closed`);
-  ok((await page.locator("#heroCta .btn-gold use").getAttribute("href")) === "#i-lock", `${label}: hero button shows a lock, not play`);
-  ok(/^Get your video/.test(await text(page, "#heroCta .btn-gold")), `${label}: hero button doesn't offer to watch`);
-  ok((await text(page, "#heroCta .hero-pay")) === "Pay $750.00 and download", `${label}: hero still offers the balance`);
+  ok((await text(page, "#heroCta .hero-note")) === "Preview closed · your clean file downloads right after", `${label}: hero says the preview is closed`);
+  ok((await text(page, "#heroCta .btn-gold")) === "Pay $750.00 and download", `${label}: the main hero button is the payment, not Watch`);
+  ok((await page.locator("#heroCta .btn-gold").getAttribute("data-pay")) === inv && (await page.locator("#heroCta .btn-gold use").getAttribute("href")) === "#i-card", `${label}: hero button pays the balance (card icon)`);
+  ok((await page.locator("#heroCta .hero-pay").count()) === 0 && (await page.locator("#heroCta [data-pay]").count()) === 1, `${label}: one Pay in the hero, not two`);
   ok((await page.locator(".g-video.is-held").count()) === 1, `${label}: held card`);
   ok((await page.locator(".g-video video, video").count()) === 0, `${label}: no video player anywhere`);
   ok((await text(page, ".g-vclosed-tag")) === "Preview closed", `${label}: lock label on the frame`);
@@ -265,10 +265,8 @@ try {
   await closedChecks(page, "closed");
   ok(!media.some((m) => m.endsWith(".mp4")), "closed: the page never requests a video file: " + media.join(", "));
   await page.click("#heroCta .btn-gold");
-  await page.waitForTimeout(700);
-  ok(await page.locator(".g-unlock .btn").isVisible(), "closed: the hero button brings the Pay button into view");
-  await page.click(".g-unlock .btn");
   await page.waitForURL(/paid=1|p=p-closed&t=tok$/);
+  ok(calls.filter((c) => c.fn === "bk-create-checkout").pop()?.body.invoice_id === "inv-closed", "closed: the hero button opens checkout for the balance");
   await ready(page);
   ok((await page.locator(".g-video.is-held").count()) === 0 && (await page.locator(".g-vclosed").count()) === 0, "closed → paid: the lock is gone");
   ok((await page.locator(".g-video video").getAttribute("src")).endsWith("/clean.mp4"), "closed → paid: plays the original");
