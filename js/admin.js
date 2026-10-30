@@ -469,7 +469,10 @@ function galleriesCard(p) {
     const unlockInv = g.unlock_invoice_id ? (p.bk_invoices || []).find((i) => i.id === g.unlock_invoice_id) : null;
     const heldPill = !g.unlock_invoice_id ? ""
       : unlockInv && unlockInv.status === "paid" ? `<span class="pill green">Paid · client can download</span>`
-      : `<span class="pill gold">Preview only until ${esc((unlockInv && unlockInv.title) || "the balance")} is paid</span>`;
+      : `<span class="pill gold">${g.preview_closed_at ? "Preview closed" : "Preview only"} until ${esc((unlockInv && unlockInv.title) || "the balance")} is paid</span>`;
+    // once she's seen it: close the preview (nothing plays until it's paid), or reopen it if she asks
+    const previewBtn = g.unlock_invoice_id && !(unlockInv && unlockInv.status === "paid")
+      ? `<button class="ga-lock" data-preview="${g.id}" data-closed="${!!g.preview_closed_at}">${g.preview_closed_at ? "Reopen preview" : "Close preview"}</button>` : "";
     // a draft goes live with "Send to client" (no message is sent; that's yours to write). The latest
     // reviewed storyboard can reopen for another round (her notes stay on the frames until she clears them)
     const lockBtn = g.kind === "proof" || (isBoard && isDraft(g) && items.length) || (isBoard && g.locked && g === latestOf[g.purpose || "storyboard"])
@@ -526,7 +529,7 @@ function galleriesCard(p) {
       <div class="ga">
         <div class="ga-head">
           <div><span class="hud">${g.purpose === "location" ? "Location" : GAL_KIND[g.kind] || g.kind}</span><b>${esc(g.title)}</b></div>
-          <div class="ga-meta">${meta}${heldPill}${copyBtn}${lockBtn}<button class="ga-del" data-galdel="${g.id}" title="Delete gallery">&#10005;</button></div>
+          <div class="ga-meta">${meta}${heldPill}${previewBtn}${copyBtn}${lockBtn}<button class="ga-del" data-galdel="${g.id}" title="Delete gallery">&#10005;</button></div>
         </div>
         ${body}
         <div class="ga-prog" data-prog="${g.id}" hidden></div>
@@ -798,6 +801,14 @@ function wireDetail(p) {
     if (error) { toast("Couldn't change that. Try again."); return; }
     toast(board ? (b.dataset.draft === "true" ? "Storyboard is live in the client's portal. No message was sent." : "Storyboard reopened for the client")
       : on ? "Proofing locked" : "Proofing reopened");
+    await load();
+  }));
+
+  $("#dpane").querySelectorAll("[data-preview]").forEach((b) => b.addEventListener("click", async () => {
+    const close = b.dataset.closed !== "true";
+    const { error } = await sb.from("bk_galleries").update({ preview_closed_at: close ? new Date().toISOString() : null }).eq("id", b.dataset.preview);
+    if (error) { toast("Couldn't change that. Try again."); return; }
+    toast(close ? "Preview closed. She sees a still and the Pay button; nothing plays until it's paid." : "Preview reopened. She can watch it again.");
     await load();
   }));
 

@@ -22,6 +22,8 @@
  *     mount() returns unlock = { invoiceId, held } for a video with a balance, so the page can name the
  *     payment and mount again (opts.quiet: no skeleton) once that invoice is paid. Between checkout and
  *     the payment landing, the page sets .is-waiting on .g-unlock to swap the Pay button for a status line.
+ *     A closed preview (gallery.preview_closed: Nelson stopped it once she'd seen it) has no video at all,
+ *     only a still with a lock, and the same Pay button; unlock.closed tells the page.
  */
 (function () {
   const esc = (s) =>
@@ -42,6 +44,7 @@
     close: svg("M6.5 6.5l11 11M17.5 6.5l-11 11"),
     pen: svg("M4.5 19.5l1-4L15.5 5.5l3 3-10 10zM13.5 7.5l3 3"),
     down: svg("M5.5 9.5L12 16l6.5-6.5"),
+    lock: svg("M6 10.5h12v9.5H6zM8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"),
   };
   const CHECK = () => (V2 ? ICON.check : "&#10003;");
   const SMALL = matchMedia("(max-width: 900px), (pointer: coarse)");
@@ -427,19 +430,24 @@
           const u = g.unlock;
           const amt = u ? money(u.amount_cents) : "";
           const name = (V2 ? shown(it) : it.filename) || "Video";
+          const closed = !!g.preview_closed;
+          const ask = closed ? "Your preview is closed." : "Watch it as often as you like.";
           card.innerHTML = `
-          ${it.url
+          ${closed
+            ? `<div class="g-vclosed">${it.thumb_url ? `<img src="${esc(it.thumb_url)}" alt="" decoding="async">` : ""}<span class="g-vclosed-tag">${ICON.lock}<span>Preview closed</span></span></div>`
+            : it.url
             ? `<video controls controlslist="nodownload noremoteplayback" disablepictureinpicture disableremoteplayback playsinline preload="metadata" src="${esc(it.url)}" aria-label="${esc(`Watermarked preview: ${name}`)}"></video>`
             : `<div class="g-vwait"><span>Your preview is on its way. Refresh in a minute.</span></div>`}
           <div class="g-cap">
             <span class="g-fn">${esc(name)}</span>
-            <span class="chip chip-due g-vtag">Preview</span>
+            <span class="chip chip-due g-vtag">${closed ? "Balance due" : "Preview"}</span>
           </div>
           <div class="g-unlock">
-            <p class="g-unlock-ask">${u && u.payable && V2
-              ? "Watch it as often as you like. When you're happy with it, pay your final balance and the clean file replaces this preview, ready to download."
-              : u && u.payable ? "Watch it as often as you like. The clean file replaces this preview, ready to download, once your final balance is paid."
-              : "Watch it as often as you like. Nelson will send your final balance, and the clean file replaces this preview once it's paid."}</p>
+            <p class="g-unlock-ask">${ask} ${u && u.payable && V2
+              ? closed ? "Pay your final balance and the clean file is ready to download right here."
+                : "When you're happy with it, pay your final balance and the clean file replaces this preview, ready to download."
+              : u && u.payable ? `The clean file ${closed ? "is ready to download here" : "replaces this preview, ready to download,"} once your final balance is paid.`
+              : `Nelson will send your final balance, and the clean file ${closed ? "is ready to download here" : "replaces this preview"} once it's paid.`}</p>
             ${u && u.payable && V2 ? `<button class="btn btn-gold btn-lg" type="button" data-pay="${esc(u.invoice_id)}"><span class="label" aria-live="polite">Pay ${esc(amt)} and download</span></button>
             <p class="g-unlock-wait">Payment received. Your clean file will be here in a few seconds.</p>` : ""}
           </div>`;
@@ -1374,7 +1382,7 @@
         if (deliverable(g) && g.items.length) delivered = true;
         if (g.picksOnly) picksSent = true;
         if (g.kind === "video") videos += g.items.length;
-        if (g.kind === "video" && g.unlock && g.items.length && (!unlock || (g.held && !unlock.held))) unlock = { invoiceId: g.unlock.invoice_id, held: !!g.held };
+        if (g.kind === "video" && g.unlock && g.items.length && (!unlock || (g.held && !unlock.held))) unlock = { invoiceId: g.unlock.invoice_id, held: !!g.held, closed: !!g.preview_closed };
         if (g.kind === "final") finalItems.push(...g.items);
         const block = galleryBlock(access, p, g, resign, stale, opts);
         if (g.kind === "proof" && !g.locked && g.items.length) {

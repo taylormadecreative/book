@@ -656,6 +656,41 @@ ol, ul { padding: 0; list-style: none; }
   color: var(--on-ink-muted);
   text-align: center;
 }
+/* a closed preview: nothing to play, just a dimmed still under a lock until it's paid */
+.g-vclosed {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--ink);
+}
+.g-vclosed img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.4;
+  filter: blur(3px) saturate(0.85);
+  transform: scale(1.04); /* hides the blur's soft edge */
+  pointer-events: none;
+}
+.g-vclosed-tag {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 42px;
+  padding: 0 1.1em;
+  border: 1px solid var(--ink-edge);
+  border-radius: 999px;
+  background: rgba(11, 11, 13, 0.74);
+  color: var(--on-ink);
+  font-weight: 600;
+  font-size: 1rem;
+}
+.g-vclosed-tag .ico { color: var(--gold); }
 @media (max-width: 640px) {
   .g-unlock { flex-direction: column; align-items: stretch; }
   .g-unlock .btn { width: 100%; }

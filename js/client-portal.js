@@ -251,8 +251,11 @@ function renderHero() {
     } else {
       const u = media.unlock && media.unlock.held ? media.unlock : null;
       const landing = u && (data.invoices || []).some((i) => i.id === u.invoiceId && (i.status === "paid" || processing(i)));
-      cta = heroButton(u ? "play" : "arrow-down", vids === 1 ? "Watch your video" : "Watch your videos",
-        landing ? "Payment received · your download is on its way" : u ? "Preview now · clean download with your final payment" : plural(vids, "video"), 'data-act="video"');
+      // a closed preview (she's seen it) has nothing to watch: the button takes her to the locked card
+      const shut = u && u.closed && !landing;
+      cta = heroButton(shut ? "lock" : u ? "play" : "arrow-down", shut ? (vids === 1 ? "Get your video" : "Get your videos") : vids === 1 ? "Watch your video" : "Watch your videos",
+        landing ? "Payment received · your download is on its way" : shut ? "Preview closed · download with your final payment"
+          : u ? "Preview now · clean download with your final payment" : plural(vids, "video"), 'data-act="video"');
     }
     // anything still owed (extra edits, a balance) sits right under the download, never hidden in a tab
     const due = unpaid()[0];

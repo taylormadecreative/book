@@ -3,6 +3,7 @@
 // Run: node tests/video-unlock.e2e.mjs
 //   PORTAL_SHOTS=<dir>        save screenshots (held + unlocked, desktop + phone) using installed Chrome
 //   PORTAL_VIDEO_PREVIEW=<f>  serve a real preview mp4 (and PORTAL_VIDEO_CLEAN=<f> the original) for those shots
+//   PORTAL_VIDEO_STILL=<f>    serve a real still (jpg) for the closed-preview shots
 import { chromium, webkit } from "/Users/nelsontaylor/.cache/pglite-rig/node_modules/playwright/index.mjs";
 import { spawn } from "node:child_process";
 import { readFileSync, mkdirSync } from "node:fs";
@@ -28,6 +29,8 @@ const S = {
   twice: () => ({ file: "Hide & Haunt Commercial.mp4", alreadyPaid: true }),
   playing: () => ({ file: "Hide & Haunt Commercial.mp4" }),
   nopreview: () => ({ file: "Hide & Haunt Commercial.mp4", noPreview: true }),
+  closed: () => ({ file: "Hide & Haunt Commercial.mp4", closed: true }),
+  closednostill: () => ({ file: "Hide & Haunt Commercial.mp4", closed: true, noStill: true }),
   evil: () => ({ file: "<img src=x onerror=window.pwned=1>.mp4" }),
 };
 const state = {};
@@ -45,6 +48,7 @@ const get = (pid) => {
   });
 };
 // what bk-media sends: the preview and no download until the balance is paid, then the original
+// (a closed preview: no video at all, only the still as the thumb)
 function galleries(s) {
   const paid = s.inv[0].status === "paid", inv = s.inv[0].id;
   const name = s.file;
@@ -54,18 +58,26 @@ function galleries(s) {
     items: [{ id: "f1", gallery_id: "gsb", filename: "1A.png", sort: 1, selected: false, thumb_url: null, url: "https://img.test/full/1A.png", download_url: null,
       meta: { scene: 1, scene_title: "Arrival", code: "1A", tc: "0:00", action: "They walk up." }, client_note: null }] };
   return [board, { id: "gv", kind: "video", title: "Hide & Haunt commercial", locked: false, selection_limit: null,
-    held: !paid, unlock: { invoice_id: inv, title: "Final balance", amount_cents: 75000, paid, payable: s.inv[0].status === "sent" },
-    items: [{ id: "v1", gallery_id: "gv", filename: name, size_bytes: 46855519, sort: 1, selected: false, thumb_url: null,
-      url: paid ? "https://img.test/full/clean.mp4" : s.noPreview ? null : "https://img.test/full/preview/clip.mp4",
+    held: !paid, preview_closed: !paid && !!s.closed, unlock: { invoice_id: inv, title: "Final balance", amount_cents: 75000, paid, payable: s.inv[0].status === "sent" },
+    items: [{ id: "v1", gallery_id: "gv", filename: name, size_bytes: 46855519, sort: 1, selected: false,
+      thumb_url: !paid && s.closed && !s.noStill ? "https://img.test/full/preview/still.jpg" : null,
+      url: paid ? "https://img.test/full/clean.mp4" : s.noPreview || s.closed ? null : "https://img.test/full/preview/clip.mp4",
       download_url: paid ? `https://img.test/full/clean.mp4?download=${encodeURIComponent(name)}` : null }] }];
 }
 const calls = [];
+const media = []; // every img.test request (a closed preview must never fetch a video)
+const PIXEL = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 
 async function wire(page, errors) {
   page.on("pageerror", (e) => errors.push(String(e)));
   page.on("console", (m) => { if (m.type() === "error" && !/favicon|net::ERR|status of 40[039]|MEDIA_ERR|NotSupportedError|no supported source/i.test(m.text())) errors.push(m.text()); });
   await page.route("https://img.test/**", (route) => {
     const path = new URL(route.request().url()).pathname;
+    media.push(path);
+    if (path.endsWith(".jpg")) {
+      const still = process.env.PORTAL_VIDEO_STILL;
+      return route.fulfill({ status: 200, contentType: still ? "image/jpeg" : "image/png", body: still ? readFileSync(still) : PIXEL });
+    }
     const real = path.includes("/preview/") ? process.env.PORTAL_VIDEO_PREVIEW : process.env.PORTAL_VIDEO_CLEAN;
     if (real) return route.fulfill({ status: 200, contentType: "video/mp4", body: readFileSync(real) });
     return route.fulfill({ status: 200, contentType: "video/mp4", body: Buffer.alloc(0) });
@@ -130,6 +142,25 @@ async function heldChecks(page, label, inv = "inv-held") {
   ok((await page.locator(".g-unlock .btn").getAttribute("data-pay")) === inv, `${label}: unlock button pays the balance invoice`);
   ok(/final balance/.test(await text(page, ".g-unlock-ask")) && !/\$/.test(await text(page, ".g-unlock-ask")), `${label}: unlock copy names the balance once (the price is on the button)`);
   ok(await page.locator(".g-unlock-wait").isHidden(), `${label}: no "payment received" line before paying`);
+}
+
+// a closed preview: nothing plays, a still under a lock, the same Pay
+async function closedChecks(page, label, inv = "inv-closed") {
+  ok((await text(page, "#headline")) === "Your video is ready.", `${label}: headline`);
+  ok((await text(page, "#heroCta .hero-note")) === "Preview closed · download with your final payment", `${label}: hero says the preview is closed`);
+  ok((await page.locator("#heroCta .btn-gold use").getAttribute("href")) === "#i-lock", `${label}: hero button shows a lock, not play`);
+  ok(/^Get your video/.test(await text(page, "#heroCta .btn-gold")), `${label}: hero button doesn't offer to watch`);
+  ok((await text(page, "#heroCta .hero-pay")) === "Pay $750.00 and download", `${label}: hero still offers the balance`);
+  ok((await page.locator(".g-video.is-held").count()) === 1, `${label}: held card`);
+  ok((await page.locator(".g-video video, video").count()) === 0, `${label}: no video player anywhere`);
+  ok((await text(page, ".g-vclosed-tag")) === "Preview closed", `${label}: lock label on the frame`);
+  ok((await page.locator(".g-vclosed img").getAttribute("src") || "").endsWith("/still.jpg"), `${label}: the still sits behind the lock`);
+  ok((await text(page, ".g-vtag")) === "Balance due", `${label}: chip says what's left`);
+  ok((await page.locator(".g-video .g-save, .g-video a[download], .g-video a[href*='download='], .g-dl").count()) === 0, `${label}: no download anywhere on the card`);
+  const ask = await text(page, ".g-unlock-ask");
+  ok(ask.startsWith("Your preview is closed.") && /final balance/.test(ask) && !/as often as you like/.test(ask) && !/\$/.test(ask), `${label}: closed copy: ` + ask);
+  ok((await text(page, ".g-unlock .btn")) === "Pay $750.00 and download", `${label}: unlock button label`);
+  ok((await page.locator(".g-unlock .btn").getAttribute("data-pay")) === inv, `${label}: unlock button pays the balance invoice`);
 }
 
 try {
@@ -227,6 +258,29 @@ try {
   ok((await page.locator(".g-video video").count()) === 0 && /preview is on its way/.test(await text(page, ".g-vwait")), "missing preview shows a note");
   ok((await page.locator(".g-unlock .btn").count()) === 1, "missing preview still offers the balance");
 
+  /* --- preview closed: nothing plays; paying still brings the clean file --- */
+  media.length = 0;
+  await page.goto(url("p-closed"));
+  await ready(page);
+  await closedChecks(page, "closed");
+  ok(!media.some((m) => m.endsWith(".mp4")), "closed: the page never requests a video file: " + media.join(", "));
+  await page.click("#heroCta .btn-gold");
+  await page.waitForTimeout(700);
+  ok(await page.locator(".g-unlock .btn").isVisible(), "closed: the hero button brings the Pay button into view");
+  await page.click(".g-unlock .btn");
+  await page.waitForURL(/paid=1|p=p-closed&t=tok$/);
+  await ready(page);
+  ok((await page.locator(".g-video.is-held").count()) === 0 && (await page.locator(".g-vclosed").count()) === 0, "closed → paid: the lock is gone");
+  ok((await page.locator(".g-video video").getAttribute("src")).endsWith("/clean.mp4"), "closed → paid: plays the original");
+  ok((await page.locator(".g-video .g-save").getAttribute("href")).includes("download="), "closed → paid: Download link");
+
+  /* --- closed with no still uploaded: a plain dark frame with the lock --- */
+  await page.goto(url("p-closednostill"));
+  await ready(page);
+  ok((await page.locator(".g-vclosed img").count()) === 0 && (await text(page, ".g-vclosed-tag")) === "Preview closed", "closed, no still: the lock on a dark frame");
+  const frameH = await page.locator(".g-vclosed").evaluate((el) => el.getBoundingClientRect().height);
+  ok(frameH > 200, `closed, no still: the frame keeps its 16:9 size (${Math.round(frameH)}px)`);
+
   /* --- a file name can't inject markup --- */
   await page.goto(url("p-evil"));
   await ready(page);
@@ -244,6 +298,11 @@ try {
   const [bw, cw] = await pp.evaluate(() => [document.querySelector(".g-unlock .btn").getBoundingClientRect().width, document.querySelector(".g-unlock").getBoundingClientRect().width]);
   ok(cw - bw < 45, `phone: unlock button spans the card (${Math.round(bw)} of ${Math.round(cw)})`);
   ok((await pp.locator(".g-unlock .btn").evaluate((b) => b.getBoundingClientRect().height)) >= 44, "phone: unlock button is a real tap target");
+  delete state["p-closed"];
+  await pp.goto(url("p-closed"));
+  await ready(pp);
+  await closedChecks(pp, "phone closed");
+  ok((await overflow(pp)) <= 0, "phone closed: no sideways scroll");
   await phone.close();
 
   ok(errors.length === 0, "no page errors: " + errors.join(" | "));
@@ -262,6 +321,11 @@ try {
   await ready(wp);
   await heldChecks(wp, "webkit");
   ok((await overflow(wp)) <= 0, "webkit: no sideways scroll");
+  delete state["p-closed"];
+  await wp.goto(url("p-closed"));
+  await ready(wp);
+  await closedChecks(wp, "webkit closed");
+  ok((await overflow(wp)) <= 0, "webkit closed: no sideways scroll");
   ok(werr.length === 0, "webkit: no page errors: " + werr.join(" | "));
   await browser.close();
 
@@ -283,6 +347,12 @@ try {
       await ready(sp);
       await showFrame(sp);
       await sp.locator(".g-video").screenshot({ path: `${SHOTS}/unlocked-card-${tag}.png` });
+      delete state["p-closed"];
+      await sp.goto(url("p-closed"));
+      await ready(sp);
+      await sp.waitForTimeout(400);
+      await sp.screenshot({ path: `${SHOTS}/closed-${tag}.png` });
+      await sp.locator(".g-video").screenshot({ path: `${SHOTS}/closed-card-${tag}.png` });
       await c.close();
     }
     await browser.close();

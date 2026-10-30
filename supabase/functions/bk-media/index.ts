@@ -58,15 +58,19 @@ async function resolveAccess(req: Request, body: any, db: ReturnType<typeof svc>
 const thumbPath = (p: string) => p.replace(/([^/]+)$/, "thumbs/$1");
 // A video held until its balance is paid plays a watermarked copy kept under preview/ (same file name).
 const previewPath = (p: string) => p.replace(/([^/]+)$/, "preview/$1");
+// Once Nelson closes the preview, only a still is left: preview/<name>.jpg (none = a plain dark frame).
+const posterPath = (p: string) => previewPath(p).replace(/\.[^./]+$/, "") + ".jpg";
 
 // Batch-sign: one storage call for every inline URL and one for every thumb,
 // instead of one call per item (a 400-photo proofing gallery would be 800+ calls).
 // Items in a held gallery sign only their preview: the original never leaves storage before it's paid,
-// and a missing preview comes back as no link at all, never the original.
-async function signItems(db: ReturnType<typeof svc>, items: any[], kindByGallery: Record<string, string>, held: Set<string>) {
+// and a missing preview comes back as no link at all, never the original. A closed preview signs no video:
+// its still goes out as the thumb.
+async function signItems(db: ReturnType<typeof svc>, items: any[], kindByGallery: Record<string, string>, held: Set<string>, closed: Set<string>) {
   if (!items.length) return [];
   const bucket = db.storage.from(BUCKET);
-  const paths = items.map((it) => held.has(it.gallery_id) ? previewPath(it.storage_path) : it.storage_path);
+  const paths = items.map((it) => closed.has(it.gallery_id) ? posterPath(it.storage_path)
+    : held.has(it.gallery_id) ? previewPath(it.storage_path) : it.storage_path);
   const [inline, thumbs] = await Promise.all([
     bucket.createSignedUrls(paths, SIGN_TTL),
     bucket.createSignedUrls(paths.map(thumbPath), SIGN_TTL),
@@ -86,7 +90,9 @@ async function signItems(db: ReturnType<typeof svc>, items: any[], kindByGallery
       id: it.id, gallery_id: it.gallery_id, filename: it.filename, content_type: it.content_type,
       size_bytes: it.size_bytes, sort: it.sort, selected: it.selected,
       meta: it.meta || {}, client_note: it.client_note ?? null,
-      url: inlineBy.get(paths[i]) ?? null, thumb_url: thumbBy.get(thumbPath(paths[i])) ?? null, download_url,
+      url: closed.has(it.gallery_id) ? null : inlineBy.get(paths[i]) ?? null,
+      thumb_url: (closed.has(it.gallery_id) ? inlineBy.get(paths[i]) : thumbBy.get(thumbPath(paths[i]))) ?? null,
+      download_url,
     };
   }));
 }
@@ -145,7 +151,10 @@ Deno.serve(async (req: Request) => {
       const held = new Set<string>((galleries || [])
         .filter((g: any) => !access.staff && g.unlock_invoice_id && unlockOf(g)?.status !== "paid")
         .map((g: any) => g.id));
-      const signed = await signItems(db, items || [], kindByGallery, held);
+      // closed = Nelson stopped the preview (she's seen it): no video until it's paid
+      const closed = new Set<string>((galleries || [])
+        .filter((g: any) => held.has(g.id) && g.preview_closed_at).map((g: any) => g.id));
+      const signed = await signItems(db, items || [], kindByGallery, held, closed);
       const byGallery: Record<string, any[]> = {};
       for (const s of signed) (byGallery[s.gallery_id] ||= []).push(s);
 
@@ -161,6 +170,7 @@ Deno.serve(async (req: Request) => {
           purpose: g.purpose ?? null,
           // held = the client is watching the preview; unlock = the invoice that releases the original
           held: held.has(g.id),
+          preview_closed: closed.has(g.id),
           // payable = it can go through checkout now (a draft or void invoice can't)
           unlock: unlockOf(g) ? (({ id, title, amount_cents, status }) =>
             ({ invoice_id: id, title, amount_cents, paid: status === "paid", payable: status === "sent" }))(unlockOf(g)) : null,

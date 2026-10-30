@@ -17,15 +17,16 @@ await import("../supabase/functions/bk-media/index.ts");
 const P = "proj-1", G = "gal-video", INV = "inv-bal";
 const ORIG = `${P}/${G}/abc-hide-and-haunt-commercial.mp4`;
 const PREV = `${P}/${G}/preview/abc-hide-and-haunt-commercial.mp4`;
-function seed(status: string, opts: { preview?: boolean; unlock?: string | null; invProject?: string } = {}) {
+const STILL = `${P}/${G}/preview/abc-hide-and-haunt-commercial.jpg`;
+function seed(status: string, opts: { preview?: boolean; unlock?: string | null; invProject?: string; closed?: boolean; still?: boolean } = {}) {
   fake.reset({
     bk_projects: [{ id: P, access_token: "tok", title: "Delilah Amaro — Hide & Haunt Commercial", client_name: "Delilah Amaro", service: "other", status: "booked", client_email: "d@x.test" }],
     bk_galleries: [{ id: G, project_id: P, kind: "video", title: "Hide & Haunt commercial", locked: false, created_at: "2026-10-29",
-      unlock_invoice_id: opts.unlock === undefined ? INV : opts.unlock }],
+      unlock_invoice_id: opts.unlock === undefined ? INV : opts.unlock, preview_closed_at: opts.closed ? "2026-10-30T00:40:00Z" : null }],
     bk_gallery_items: [{ id: "it-1", gallery_id: G, project_id: P, storage_path: ORIG, filename: "Hide & Haunt Commercial.mp4", sort: 1, created_at: "2026-10-29" }],
     bk_invoices: [{ id: INV, project_id: opts.invProject ?? P, title: "Final balance", amount_cents: 75000, status }],
     profiles: [{ id: "staff-uid", role: "admin" }],
-  }, [ORIG, ...(opts.preview === false ? [] : [PREV])]);
+  }, [ORIG, ...(opts.preview === false ? [] : [PREV]), ...(opts.still === false ? [] : [STILL])]);
 }
 const list = async (body: Record<string, unknown>, auth?: string) => {
   const res = await handler(new Request("https://fake/bk-media", {
@@ -90,6 +91,39 @@ seed("sent", { unlock: null });
 r = await list({ project_id: P, token: "tok" });
 g = gallery(r.json); it = g.items[0];
 ok(g.held === false && g.unlock === null && it.download_url, "no unlock invoice = normal delivery");
+
+// 6b. preview closed (she's seen it): no video at all, not even the preview; the still is the thumb
+seed("sent", { closed: true });
+fake.signed.length = 0;
+r = await list({ project_id: P, token: "tok" });
+g = gallery(r.json); it = g.items[0];
+ok(g.held === true && g.preview_closed === true && g.unlock.payable === true, "closed: still held, flagged closed, still payable");
+ok(it.url === null && it.download_url === null, "closed: no video link and no download");
+ok(it.thumb_url && it.thumb_url.includes(STILL), "closed: the still comes back as the thumb: " + it.thumb_url);
+ok(!fake.signed.includes(PREV) && !fake.signed.includes(ORIG), "closed: storage never signs the preview or the original: " + fake.signed.join(", "));
+
+// 6c. closed with no still uploaded: nothing at all (a dark frame), never a video
+seed("sent", { closed: true, still: false });
+r = await list({ project_id: P, token: "tok" });
+it = gallery(r.json).items[0];
+ok(it.url === null && it.thumb_url === null && it.download_url === null, "closed without a still: no links at all");
+
+// 6d. closed then paid: the original and its download come back
+seed("paid", { closed: true });
+r = await list({ project_id: P, token: "tok" });
+g = gallery(r.json); it = g.items[0];
+ok(g.held === false && g.preview_closed === false && it.url.includes(ORIG) && it.download_url, "paying unlocks a closed preview too");
+
+// 6e. staff see the original even with the preview closed
+seed("sent", { closed: true });
+r = await list({ project_id: P }, "aaa.staff.jwt");
+g = gallery(r.json);
+ok(g.held === false && g.preview_closed === false && g.items[0].url.includes(ORIG), "staff unaffected by a closed preview");
+
+// 6f. an open preview doesn't sign the still and isn't flagged
+seed("sent");
+r = await list({ project_id: P, token: "tok" });
+ok(gallery(r.json).preview_closed === false && gallery(r.json).items[0].url.includes("/preview/"), "open preview: flag false, preview plays");
 
 // 7. wrong token sees nothing
 seed("sent");
