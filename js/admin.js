@@ -469,10 +469,12 @@ function galleriesCard(p) {
     const unlockInv = g.unlock_invoice_id ? (p.bk_invoices || []).find((i) => i.id === g.unlock_invoice_id) : null;
     const heldPill = !g.unlock_invoice_id ? ""
       : unlockInv && unlockInv.status === "paid" ? `<span class="pill green">Paid · client can download</span>`
-      : `<span class="pill gold">${g.preview_closed_at ? "Preview closed" : "Preview only"} until ${esc((unlockInv && unlockInv.title) || "the balance")} is paid</span>`;
-    // once she's seen it: close the preview (nothing plays until it's paid), or reopen it if she asks
+      : `<span class="pill gold">${g.preview_closed_at ? `Preview stopped ${esc(fmtD(g.preview_closed_at))}` : "Preview only"} until ${esc((unlockInv && unlockInv.title) || "the balance")} is paid</span>`;
+    // once the client has seen it: stop the preview (nothing plays until it's paid), or let them watch again
     const previewBtn = g.unlock_invoice_id && !(unlockInv && unlockInv.status === "paid")
-      ? `<button class="ga-lock" data-preview="${g.id}" data-closed="${!!g.preview_closed_at}">${g.preview_closed_at ? "Reopen preview" : "Close preview"}</button>` : "";
+      ? `<button class="ga-lock" data-preview="${g.id}" data-closed="${!!g.preview_closed_at}" title="${g.preview_closed_at
+          ? "The client can stream the watermarked preview again"
+          : "The client stops seeing the video at all (a blurred still and the Pay button) until it's paid"}">${g.preview_closed_at ? "Let client watch again" : "Stop client preview"}</button>` : "";
     // a draft goes live with "Send to client" (no message is sent; that's yours to write). The latest
     // reviewed storyboard can reopen for another round (her notes stay on the frames until she clears them)
     const lockBtn = g.kind === "proof" || (isBoard && isDraft(g) && items.length) || (isBoard && g.locked && g === latestOf[g.purpose || "storyboard"])
@@ -806,9 +808,12 @@ function wireDetail(p) {
 
   $("#dpane").querySelectorAll("[data-preview]").forEach((b) => b.addEventListener("click", async () => {
     const close = b.dataset.closed !== "true";
-    const { error } = await sb.from("bk_galleries").update({ preview_closed_at: close ? new Date().toISOString() : null }).eq("id", b.dataset.preview);
-    if (error) { toast("Couldn't change that. Try again."); return; }
-    toast(close ? "Preview closed. She sees a still and the Pay button; nothing plays until it's paid." : "Preview reopened. She can watch it again.");
+    if (close && !confirm("Stop the client's preview? They'll see a blurred still and the Pay button, and nothing plays until it's paid. You can let them watch again any time.")) return;
+    // ask for the row back: a write the database quietly refuses must not read as done
+    const { data: rows, error } = await sb.from("bk_galleries").update({ preview_closed_at: close ? new Date().toISOString() : null })
+      .eq("id", b.dataset.preview).select("id");
+    if (error || !rows || !rows.length) { toast("Couldn't change that. Try again."); return; }
+    toast(close ? "Preview stopped. Nothing plays for the client until it's paid." : "Preview back on. The client can watch it again.");
     await load();
   }));
 

@@ -31,7 +31,7 @@ const TABS = ["photos", "details", "messages", "invoices"];
 let data = null;   // last bk_portal payload
 let media = null;  // what BKGallery.mount found
 let heroKey = "", lastMsgKey = "", lastCtKey = null, lastInvKey = null, lastFilesKey = null;
-let extrasCents = Promise.resolve(0), remounting = false;
+let extrasCents = Promise.resolve(0), remounting = false, polls = 0;
 
 // browser storage is a convenience only (private mode can refuse it)
 const store = {
@@ -146,6 +146,27 @@ async function refresh() {
     const next = await BK.rpc("bk_portal", { p_project: PID, p_token: TOKEN });
     if (next && next.project) { data = next; render(); unlockVideo(); }
   } catch (_) { /* transient; keep the last view */ }
+  if (++polls % 6 === 0) previewClosing();
+}
+
+// Nelson can close a preview while this page is open: check about once a minute and swap in the locked
+// card (never mid-play; links already handed out run out on their own)
+async function previewClosing() {
+  const u = media && media.unlock;
+  if (!u || !u.held || u.closed || remounting || !window.BKGallery) return;
+  let list;
+  try { list = await BKGallery.list({ mode: "token", project_id: PID, token: TOKEN }); } catch (_) { return; }
+  const g = ((list.projects || [])[0]?.galleries || []).find((x) => x.unlock && x.unlock.invoice_id === u.invoiceId);
+  if (!g || !g.preview_closed) return;
+  const playing = $$("#galleryRoot .g-video.is-held video").find((v) => !v.paused && !v.ended);
+  if (playing) { playing.addEventListener("pause", previewClosing, { once: true }); return; }
+  remounting = true;
+  const next = await mountGallery(true);
+  remounting = false;
+  if (!next || next.error) return;
+  media = next;
+  heroKey = "";
+  render();
 }
 
 // a held video unlocks once its balance is paid (often a few seconds after checkout sends them back):
@@ -240,7 +261,7 @@ function renderHero() {
   const f = media && media.finals;
   const vids = (media && media.videos) || 0;
   const photoWork = PHOTO_SERVICES.includes(p.service);
-  let h, cta = "";
+  let h, cta = "", heroPays = null;
   if (st === "ready") {
     h = f && vids ? "Your photos and video are ready."
       : f ? (f.count === 1 ? "Your photo is ready." : "Your photos are ready.")
@@ -252,16 +273,21 @@ function renderHero() {
       const u = media.unlock && media.unlock.held ? media.unlock : null;
       const landing = u && (data.invoices || []).some((i) => i.id === u.invoiceId && (i.status === "paid" || processing(i)));
       // a closed preview (she's seen it) has nothing to watch: paying is the one thing left, so it's the main button
-      const shut = u && u.closed && !landing;
-      const owed = shut && unpaid().find((i) => i.id === u.invoiceId);
-      cta = owed
-        ? heroButton("card", `Pay ${money(owed.amount_cents)} and download`, "Preview closed · your clean file downloads right after", `data-pay="${esc(owed.id)}"`)
-        : heroButton(shut ? "lock" : u ? "play" : "arrow-down", shut ? (vids === 1 ? "Get your video" : "Get your videos") : vids === 1 ? "Watch your video" : "Watch your videos",
-          landing ? "Payment received · your download is on its way" : shut ? "Preview closed · download with your final payment"
+      const closedPv = !!(u && u.closed);
+      const owed = closedPv && !landing ? unpaid().find((i) => i.id === u.invoiceId) : null;
+      if (owed) {
+        heroPays = owed.id;
+        cta = heroButton("card", `Pay ${money(owed.amount_cents)} and download`, "Clean, full-quality file · ready the moment it's paid", `data-pay="${esc(owed.id)}"`);
+      } else {
+        const get = vids === 1 ? "Get your video" : "Get your videos";
+        cta = heroButton(landing ? "arrow-down" : closedPv ? "lock" : u ? "play" : "arrow-down",
+          closedPv ? get : vids === 1 ? "Watch your video" : "Watch your videos",
+          landing ? "Payment received · your download is on its way" : closedPv ? "Unlocks with your final payment"
             : u ? "Preview now · clean download with your final payment" : plural(vids, "video"), 'data-act="video"');
+      }
     }
     // anything still owed (extra edits, a balance) sits right under the download, never hidden in a tab
-    const due = unpaid().find((i) => !cta.includes(`data-pay="${esc(i.id)}"`));
+    const due = unpaid().find((i) => i.id !== heroPays);
     const unlocks = due && media.unlock && media.unlock.invoiceId === due.id;
     if (due) cta += `<button class="btn btn-line hero-pay" type="button" data-pay="${esc(due.id)}">${icon("card")}<span class="label" aria-live="polite">${unlocks ? `Pay ${money(due.amount_cents)} and download` : `Pay ${money(due.amount_cents)} · ${esc(due.title)}`}</span></button>`;
   } else if (st === "storyboard") {

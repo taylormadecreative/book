@@ -31,6 +31,8 @@ const S = {
   nopreview: () => ({ file: "Hide & Haunt Commercial.mp4", noPreview: true }),
   closed: () => ({ file: "Hide & Haunt Commercial.mp4", closed: true }),
   closednostill: () => ({ file: "Hide & Haunt Commercial.mp4", closed: true, noStill: true }),
+  closedslow: () => ({ file: "Hide & Haunt Commercial.mp4", closed: true, slow: true, slowMs: 5000 }),
+  closing: () => ({ file: "Hide & Haunt Commercial.mp4" }),
   evil: () => ({ file: "<img src=x onerror=window.pwned=1>.mp4" }),
 };
 const state = {};
@@ -136,7 +138,7 @@ async function heldChecks(page, label, inv = "inv-held") {
   ok(/nodownload/.test(await v.getAttribute("controlslist")), `${label}: controls without a download item`);
   ok((await v.getAttribute("disablepictureinpicture")) !== null, `${label}: no picture-in-picture`);
   ok(await v.evaluate((el) => !el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }))), `${label}: right-click menu blocked on the video`);
-  ok((await v.getAttribute("aria-label")) === "Watermarked preview: Hide & Haunt Commercial.mp4" || label === "evil", `${label}: the player has a name`);
+  ok((await v.getAttribute("aria-label")) === "Watermarked preview: Hide & Haunt Commercial" || label === "evil", `${label}: the player has a name`);
   ok((await text(page, ".g-vtag")) === "Preview" && (await page.locator(".g-vtag.chip-due").count()) === 1, `${label}: Preview chip`);
   ok((await text(page, ".g-unlock .btn")) === "Pay $750.00 and download", `${label}: unlock button label`);
   ok((await page.locator(".g-unlock .btn").getAttribute("data-pay")) === inv, `${label}: unlock button pays the balance invoice`);
@@ -147,18 +149,20 @@ async function heldChecks(page, label, inv = "inv-held") {
 // a closed preview: nothing plays, a still under a lock, the same Pay
 async function closedChecks(page, label, inv = "inv-closed") {
   ok((await text(page, "#headline")) === "Your video is ready.", `${label}: headline`);
-  ok((await text(page, "#heroCta .hero-note")) === "Preview closed · your clean file downloads right after", `${label}: hero says the preview is closed`);
+  ok((await text(page, "#heroCta .hero-note")) === "Clean, full-quality file · ready the moment it's paid", `${label}: hero note says what paying gets`);
   ok((await text(page, "#heroCta .btn-gold")) === "Pay $750.00 and download", `${label}: the main hero button is the payment, not Watch`);
   ok((await page.locator("#heroCta .btn-gold").getAttribute("data-pay")) === inv && (await page.locator("#heroCta .btn-gold use").getAttribute("href")) === "#i-card", `${label}: hero button pays the balance (card icon)`);
   ok((await page.locator("#heroCta .hero-pay").count()) === 0 && (await page.locator("#heroCta [data-pay]").count()) === 1, `${label}: one Pay in the hero, not two`);
   ok((await page.locator(".g-video.is-held").count()) === 1, `${label}: held card`);
   ok((await page.locator(".g-video video, video").count()) === 0, `${label}: no video player anywhere`);
-  ok((await text(page, ".g-vclosed-tag")) === "Preview closed", `${label}: lock label on the frame`);
+  ok((await text(page, ".g-vclosed-tag")) === "Unlocks with your final payment", `${label}: lock line on the frame`);
+  ok(await page.locator(".g-vclosed-tag").evaluate((el) => el.tagName === "P" && !el.closest("button, a") && getComputedStyle(el).borderTopWidth === "0px" && getComputedStyle(el).backgroundColor === "rgba(0, 0, 0, 0)"), `${label}: the lock line is a label, not a capsule that looks tappable`);
   ok((await page.locator(".g-vclosed img").getAttribute("src") || "").endsWith("/still.jpg"), `${label}: the still sits behind the lock`);
-  ok((await text(page, ".g-vtag")) === "Balance due", `${label}: chip says what's left`);
+  ok((await text(page, ".g-vtag")) === "Final cut", `${label}: chip names what it is`);
+  ok((await text(page, ".g-fn")) === "Hide & Haunt Commercial", `${label}: video name without .mp4`);
   ok((await page.locator(".g-video .g-save, .g-video a[download], .g-video a[href*='download='], .g-dl").count()) === 0, `${label}: no download anywhere on the card`);
   const ask = await text(page, ".g-unlock-ask");
-  ok(ask.startsWith("Your preview is closed.") && /final balance/.test(ask) && !/as often as you like/.test(ask) && !/\$/.test(ask), `${label}: closed copy: ` + ask);
+  ok(ask.startsWith("Your final cut is done.") && /final balance/.test(ask) && /full-quality/.test(ask) && !/as often as you like|closed/.test(ask) && !/\$/.test(ask), `${label}: closed copy: ` + ask);
   ok((await text(page, ".g-unlock .btn")) === "Pay $750.00 and download", `${label}: unlock button label`);
   ok((await page.locator(".g-unlock .btn").getAttribute("data-pay")) === inv, `${label}: unlock button pays the balance invoice`);
 }
@@ -176,7 +180,7 @@ try {
   await heldChecks(page, "desktop");
   ok((await page.locator(".sb-pay").count()) === 0 && !/Next is your deposit/.test(await page.locator("#galleryRoot").innerText()), "the approved storyboard no longer asks for the deposit once the video is here");
   ok(/Storyboard approved/.test(await page.locator("#galleryRoot").innerText()), "the storyboard still shows it was approved");
-  ok((await text(page, ".g-fn")) === "Hide & Haunt Commercial.mp4", "file name shown");
+  ok((await text(page, ".g-fn")) === "Hide & Haunt Commercial", "video name shown as a title, without .mp4");
   // the invoices tab lists the balance with its own Pay
   await page.click("#tab-invoices");
   ok(/Final balance/.test(await page.locator("#invoicesBlock, #panel-invoices").first().innerText()), "balance listed under Invoices");
@@ -272,12 +276,43 @@ try {
   ok((await page.locator(".g-video video").getAttribute("src")).endsWith("/clean.mp4"), "closed → paid: plays the original");
   ok((await page.locator(".g-video .g-save").getAttribute("href")).includes("download="), "closed → paid: Download link");
 
+  /* --- closed, paid but the webhook is late: no Pay, no Watch, it says the payment is in --- */
+  await page.goto(url("p-closedslow"));
+  await ready(page);
+  await page.click("#heroCta .btn-gold");
+  await page.waitForURL(/paid=1|p=p-closedslow&t=tok$/);
+  await ready(page);
+  ok((await page.locator("#heroCta [data-pay]").count()) === 0, "closed, late webhook: no Pay in the hero while it's processing");
+  ok((await text(page, "#heroCta .btn-gold")) === "Get your video" && (await page.locator("#heroCta .btn-gold use").getAttribute("href")) === "#i-arrow-down", "closed, late webhook: hero doesn't offer to Watch");
+  ok((await text(page, "#heroCta .hero-note")) === "Payment received · your download is on its way", "closed, late webhook: hero says it's on its way");
+  ok((await page.locator(".g-unlock-wait").isVisible()) && await page.locator(".g-unlock .btn").isHidden(), "closed, late webhook: the card says the payment is in");
+  await page.waitForSelector(".g-video .g-save", { timeout: 16000 }).catch(() => {});
+  ok((await page.locator(".g-video .g-save").count()) === 1 && (await page.locator(".g-vclosed").count()) === 0, "closed, late webhook: unlocks on the next poll");
+
   /* --- closed with no still uploaded: a plain dark frame with the lock --- */
   await page.goto(url("p-closednostill"));
   await ready(page);
-  ok((await page.locator(".g-vclosed img").count()) === 0 && (await text(page, ".g-vclosed-tag")) === "Preview closed", "closed, no still: the lock on a dark frame");
+  ok((await page.locator(".g-vclosed img").count()) === 0 && (await text(page, ".g-vclosed-tag")) === "Unlocks with your final payment", "closed, no still: the lock on a dark frame");
   const frameH = await page.locator(".g-vclosed").evaluate((el) => el.getBoundingClientRect().height);
   ok(frameH > 200, `closed, no still: the frame keeps its 16:9 size (${Math.round(frameH)}px)`);
+
+  /* --- a tab left open when Nelson stops the preview: it swaps to the lock within a minute, not mid-play --- */
+  const cp = await ctx.newPage();
+  await wire(cp, errors);
+  await cp.clock.install();
+  await cp.goto(url("p-closing"));
+  await ready(cp);
+  ok((await cp.locator(".g-video video").count()) === 1, "closing: the open tab is playing the preview");
+  state["p-closing"].closed = true;
+  await cp.evaluate(() => { const v = document.querySelector(".g-video video"); Object.defineProperty(v, "paused", { configurable: true, get: () => false }); });
+  await cp.clock.runFor(61000);
+  await cp.waitForTimeout(600);
+  ok((await cp.locator(".g-video video").count()) === 1 && (await cp.locator(".g-vclosed").count()) === 0, "closing: mid-play it keeps playing");
+  await cp.evaluate(() => { const v = document.querySelector(".g-video video"); Object.defineProperty(v, "paused", { configurable: true, get: () => true }); v.dispatchEvent(new Event("pause")); });
+  await cp.waitForSelector(".g-vclosed", { timeout: 5000 }).catch(() => {});
+  ok((await cp.locator(".g-vclosed").count()) === 1 && (await cp.locator(".g-video video").count()) === 0, "closing: on pause the card swaps to the lock");
+  ok((await text(cp, "#heroCta .btn-gold")) === "Pay $750.00 and download", "closing: the hero becomes the Pay button");
+  await cp.close();
 
   /* --- a file name can't inject markup --- */
   await page.goto(url("p-evil"));

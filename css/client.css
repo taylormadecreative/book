@@ -656,7 +656,7 @@ ol, ul { padding: 0; list-style: none; }
   color: var(--on-ink-muted);
   text-align: center;
 }
-/* a closed preview: nothing to play, just a dimmed still under a lock until it's paid */
+/* a closed preview: nothing to play, just a still (blurred in the file itself) under one quiet line */
 .g-vclosed {
   position: relative;
   display: grid;
@@ -671,24 +671,27 @@ ol, ul { padding: 0; list-style: none; }
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.4;
-  filter: blur(3px) saturate(0.85);
-  transform: scale(1.04); /* hides the blur's soft edge */
   pointer-events: none;
 }
+.g-vclosed::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 60% 55% at 50% 50%, rgba(11, 11, 13, 0.62), rgba(11, 11, 13, 0.22));
+}
+/* a label, not a button: no capsule to tap */
 .g-vclosed-tag {
   position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  min-height: 42px;
-  padding: 0 1.1em;
-  border: 1px solid var(--ink-edge);
-  border-radius: 999px;
-  background: rgba(11, 11, 13, 0.74);
+  gap: 0.55rem;
+  padding: 0 1.25rem;
   color: var(--on-ink);
   font-weight: 600;
-  font-size: 1rem;
+  font-size: clamp(1rem, 0.9rem + 0.5vw, 1.2rem);
+  text-align: center;
+  text-wrap: balance;
 }
 .g-vclosed-tag .ico { color: var(--gold); }
 @media (max-width: 640px) {

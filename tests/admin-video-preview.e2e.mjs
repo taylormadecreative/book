@@ -21,6 +21,7 @@ const project = { id: PID, title: "Delilah Amaro — Hide & Haunt Commercial", c
   service: "other", status: "in_production", event_date: null, event_time: null, location: null, budget_range: null, details: "",
   notes_internal: "", access_token: "tok", created_at: now, updated_at: now, bk_invoices: [inv], bk_messages: [], bk_files: [], bk_galleries: [gal] };
 const patches = [];
+let refuse = false; // the database quietly refuses the write (no row back)
 
 try {
   browser = await chromium.launch();
@@ -36,8 +37,9 @@ try {
     if (url.includes("/rest/v1/bk_galleries") && req.method() === "PATCH") {
       const body = JSON.parse(req.postData() || "{}");
       patches.push({ url, body });
+      if (refuse) return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
       if ("preview_closed_at" in body) gal.preview_closed_at = body.preview_closed_at;
-      return route.fulfill({ status: 204, body: "" });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ id: GID }]) });
     }
     if (url.includes("/rest/v1/bk_projects")) return json([project]);
     if (url.includes("/auth/v1/")) return json({ id: "u1", email: "n@x.com", aud: "authenticated", role: "authenticated" });
@@ -46,6 +48,9 @@ try {
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  const dialogs = [];
+  let answer = true;
+  page.on("dialog", (d) => { dialogs.push(d.message()); answer ? d.accept() : d.dismiss(); });
   await page.goto(`http://127.0.0.1:${PORT}/admin.html`);
   await page.waitForSelector(`.prow[data-id="${PID}"]`, { timeout: 10000 });
   await page.click(`.prow[data-id="${PID}"]`);
@@ -55,21 +60,40 @@ try {
 
   // open preview: the button offers to close it
   ok((await pill()) === "Preview only until Final balance is paid", "open: pill says preview only: " + await pill());
-  ok((await btn.textContent()).trim() === "Close preview", "open: button offers Close preview");
+  ok((await btn.textContent()).trim() === "Stop client preview", "open: button offers Stop client preview");
+  ok(/until it's paid/.test(await btn.getAttribute("title")), "open: button explains itself on hover");
 
-  // close it
+  // cancel the confirm: nothing is written
+  answer = false;
   await btn.click();
-  await page.waitForFunction(() => document.querySelector("[data-preview]")?.textContent.trim() === "Reopen preview", null, { timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  ok(dialogs.length === 1 && /blurred still/.test(dialogs[0]) && patches.length === 0, "stop asks first; cancel writes nothing");
+  answer = true;
+
+  // the database refuses quietly: no success toast, nothing changes
+  refuse = true;
+  await btn.click();
+  await page.waitForTimeout(500);
+  ok(/Couldn't change that/.test(await page.locator("#toast, .toast").first().textContent().catch(() => "")), "a refused write says it failed: " + await page.locator("#toast, .toast").first().textContent().catch(() => ""));
+  ok((await btn.textContent()).trim() === "Stop client preview", "a refused write leaves the button as it was");
+  patches.length = 0;
+  refuse = false;
+
+  // stop it
+  await btn.click();
+  await page.waitForFunction(() => document.querySelector("[data-preview]")?.textContent.trim() === "Let client watch again", null, { timeout: 5000 }).catch(() => {});
   const p1 = patches.pop();
   ok(p1 && p1.url.includes(`id=eq.${GID}`) && typeof p1.body.preview_closed_at === "string" && !Number.isNaN(Date.parse(p1.body.preview_closed_at)) && Object.keys(p1.body).length === 1,
     "close: writes only preview_closed_at = now on that gallery: " + JSON.stringify(p1));
-  ok((await pill()) === "Preview closed until Final balance is paid", "closed: pill says preview closed: " + await pill());
-  ok((await btn.textContent()).trim() === "Reopen preview", "closed: button offers Reopen preview");
-  ok(/Preview closed/.test(await page.locator("#toast, .toast").first().textContent().catch(() => "")), "close: toast confirms");
+  ok(/^Preview stopped [A-Z][a-z]{2} \d{1,2}, \d{4} until Final balance is paid$/.test(await pill()), "stopped: pill says when: " + await pill());
+  ok((await btn.textContent()).trim() === "Let client watch again", "stopped: button offers to let the client watch again");
+  ok(/Preview stopped/.test(await page.locator("#toast, .toast").first().textContent().catch(() => "")), "stop: toast confirms");
 
-  // reopen it
+  // let her watch again (no confirm needed to give access back)
+  const before = dialogs.length;
   await btn.click();
-  await page.waitForFunction(() => document.querySelector("[data-preview]")?.textContent.trim() === "Close preview", null, { timeout: 5000 }).catch(() => {});
+  await page.waitForFunction(() => document.querySelector("[data-preview]")?.textContent.trim() === "Stop client preview", null, { timeout: 5000 }).catch(() => {});
+  ok(dialogs.length === before, "watching again doesn't ask");
   const p2 = patches.pop();
   ok(p2 && p2.body.preview_closed_at === null, "reopen: clears preview_closed_at: " + JSON.stringify(p2));
   ok((await pill()) === "Preview only until Final balance is paid", "reopened: pill back to preview only");
