@@ -459,6 +459,12 @@ button.crm-stat:active { transform: scale(0.97); }
   .whead { grid-template-columns: minmax(0, 1fr); grid-template-areas: "id" "acts" "tabs"; }
   .whead-acts { justify-content: flex-start; }
 }
+/* The page title already identifies the Inbox. Drop the duplicate header tag
+   before reducing navigation, including while wider fallback fonts are active. */
+@media (max-width: 959px) {
+  .crm-bar .crm-tag { display: none; }
+  .crm-nav { gap: 0.9rem; }
+}
 /* short laptop screens: give the thread the height, not the header */
 @media (min-width: 760px) and (max-height: 860px) {
   .whead { padding-top: 0.8rem; padding-bottom: 0.75rem; }

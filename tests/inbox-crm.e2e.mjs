@@ -108,7 +108,9 @@ const draftReady = (page) => page.waitForFunction(() => !document.querySelector(
   // Web fonts can be unavailable or still loading. Linux sans-serif fallbacks
   // are wider than the condensed fonts installed on Nelson's Mac.
   const fallbackFonts = await page.addStyleTag({ content: ":root { --font-display: Arial, sans-serif; --font-ui: Arial, sans-serif; --font-mono: monospace; --font-body: Arial, sans-serif; }" });
-  for (const width of [1440, 1512, 1799, 1800]) {
+  const alertsText = await page.textContent("#alertsLabel");
+  await page.locator("#alertsLabel").evaluate((el) => el.textContent = "Alerts on");
+  for (const width of [360, 390, 760, 820, 959, 1024, 1179, 1280, 1439, 1440, 1512, 1799, 1800]) {
     await page.setViewportSize({ width, height: 900 });
     await ok(noSideScroll(page), `fallback fonts overflow at ${width}px`);
     await ok(page.evaluate(() => [...document.querySelectorAll(".crm-nav > *")]
@@ -116,6 +118,7 @@ const draftReady = (page) => page.waitForFunction(() => !document.querySelector(
       .every((el) => { const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })), `fallback fonts hide studio tools at ${width}px`);
     await ok(page.evaluate(() => document.querySelector("#topBar").getBoundingClientRect().height <= 61), `fallback fonts increase the fixed header height at ${width}px`);
   }
+  await page.locator("#alertsLabel").evaluate((el, text) => el.textContent = text, alertsText);
   await fallbackFonts.evaluate((el) => el.remove());
   await page.setViewportSize({ width: 1512, height: 900 });
   await page.waitForTimeout(SHOTS ? 600 : 50);
