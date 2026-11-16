@@ -439,6 +439,16 @@ button.crm-stat:active { transform: scale(0.97); }
   .lstats .crm-stat b { font-size: 1.45rem; }
   .lstats .crm-stat > span { font-family: var(--font-mono); font-size: 0.6875rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 }
+/* The full-width fallback fonts are wider than Plex/Anton. Keep every tool
+   visible on desktop while fonts load by giving the stats bounded columns. */
+@media (min-width: 1440px) and (max-width: 1799px) {
+  .crm-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); flex: 1; min-width: 0; }
+  .crm-stats .crm-stat { min-width: 0; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0.2rem; padding: 0 0.8rem; }
+  .crm-stats .crm-stat b { font-size: 1.5rem; }
+  .crm-stats .crm-stat > span { font-size: 0.72rem; line-height: 1.2; white-space: normal; }
+  .crm-stats .n-long { display: none; }
+  .crm-stats .n-short { display: inline; }
+}
 @media (min-width: 760px) and (max-width: 959px), (max-width: 374px) {
   .lstats .crm-stat { padding: 0.5rem 0.55rem; }
   .lstats .crm-stat b { font-size: 1.15rem; }
