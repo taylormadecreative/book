@@ -1,10 +1,11 @@
+import { fileURLToPath } from "node:url";
 // Real-Postgres test (PGlite, no Docker) for the content calendar migration: it re-runs cleanly,
 // its checks hold, updated_at moves, and only the studio admin can read or change a post.
 // Run: node tests/content-calendar.pglite.mjs
-import { PGlite } from "/Users/nelsontaylor/.cache/pglite-rig/node_modules/@electric-sql/pglite/dist/index.js";
+import { PGlite } from "@electric-sql/pglite";
 import { readFileSync } from "node:fs";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 let failures = 0, checks = 0;
 const ok = (cond, msg) => { checks++; if (!cond) { failures++; console.error("FAIL:", msg); } };
 const db = new PGlite();

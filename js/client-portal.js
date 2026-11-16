@@ -28,6 +28,7 @@ const PIPELINE = ["new", "quoted", "booked", "in_production", "delivered"];
 const PIPE_LABEL = { new: "Inquiry", quoted: "Quoted", booked: "Booked", in_production: "Production", delivered: "Delivered" };
 const TABS = ["photos", "details", "messages", "invoices"];
 
+let quotes = [], quoteError = "", billing = null, lastQuoteKey = "", quoteBusy = false;
 let data = null;   // last bk_portal payload
 let media = null;  // what BKGallery.mount found
 let heroKey = "", lastMsgKey = "", lastCtKey = null, lastInvKey = null, lastFilesKey = null;
@@ -38,9 +39,15 @@ const store = {
   get: (k) => { try { return localStorage.getItem(k); } catch (_) { return null; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch (_) { /* fine */ } },
 };
+const sessionStore = {
+  getItem: k => { try { return globalThis.sessionStorage.getItem(k); } catch (_) { return null; } },
+  setItem: (k,v) => { try { globalThis.sessionStorage.setItem(k,v); } catch (_) { /* optional */ } },
+  removeItem: k => { try { globalThis.sessionStorage.removeItem(k); } catch (_) { /* optional */ } },
+};
 // "Welcome back" only once they've been here before
 const RETURNING = (() => { const k = `bk_visit_${PID}`, seen = !!store.get(k); store.set(k, "1"); return seen; })();
 
+const received = inv => inv.paid_amount_cents ?? inv.amount_cents;
 const money = (c) => `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 const day = (d, o) => new Date(d + "T12:00:00").toLocaleDateString("en-US", o);
 const longDate = (d) => (d ? day(d, { month: "long", day: "numeric", year: "numeric" }) : "To be set");
@@ -70,14 +77,20 @@ const displayName = (fn, project) => {
 // just back from checkout: the webhook may not have marked it paid yet (a reload in that gap still counts)
 const RETURNED = (() => {
   try {
-    if (JUST_PAID) sessionStorage.setItem("bk_paid_back", String(Date.now()));
-    return Date.now() - Number(sessionStorage.getItem("bk_paid_back") || 0) < 5 * 60 * 1000;
+    if (JUST_PAID) sessionStore.setItem("bk_paid_back", String(Date.now()));
+    return Date.now() - Number(sessionStore.getItem("bk_paid_back") || 0) < 5 * 60 * 1000;
   } catch (_) { return JUST_PAID; }
 })();
-const processing = (inv) => inv.status === "sent" && RETURNED && inv.id === sessionStorage.getItem("bk_paying");
+const processing = (inv) => inv.status === "sent" && RETURNED && inv.id === sessionStore.getItem("bk_paying");
 const unpaid = () => (data.invoices || []).filter((i) => i.status === "sent" && !processing(i))
   .sort((a, b) => (a.due_date || "9").localeCompare(b.due_date || "9"));
 const safeUrl = (u) => /^https:\/\//i.test(u || "");
+const checkoutUrl = (u) => {
+  try {
+    const target = new URL(u);
+    return target.protocol === "https:" || (target.protocol === "http:" && target.origin === location.origin && ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname));
+  } catch (_) { return false; }
+};
 // the client's own "Extra edits" invoice (bk_portal_request_extras)
 const isExtras = (inv) => inv.kind === "custom" && inv.title === "Extra edits";
 
@@ -115,6 +128,7 @@ async function init() {
     return fail(/not.found|invalid input syntax/i.test(err && err.message) ? "missing" : "offline");
   }
   if (!data || !data.project) return fail("missing");
+  await loadCrmPortal();
   media = await mounting;
   storyboardTab();
   paidBanner();
@@ -146,7 +160,8 @@ async function refresh() {
     const next = await BK.rpc("bk_portal", { p_project: PID, p_token: TOKEN });
     if (next && next.project) { data = next; render(); unlockVideo(); }
   } catch (_) { /* transient; keep the last view */ }
-  if (++polls % 6 === 0) previewClosing();
+  if (++polls % 3 === 0) { await loadCrmPortal(); renderQuotes(); renderHero(); }
+  if (polls % 6 === 0) previewClosing();
 }
 
 // Nelson can close a preview while this page is open: check about once a minute and swap in the locked
@@ -240,6 +255,7 @@ function stage() {
 
 /* ---------------- render ---------------- */
 function render() {
+  for(const inv of data.invoices || []) { const paid=billing?.paid_amounts?.find(p=>p.id===inv.id); if(paid) inv.paid_amount_cents=paid.paid_amount_cents; }
   const p = data.project;
   $("#avatar").textContent = initials(p);
   $("#whoName").textContent = firstName(p);
@@ -249,6 +265,7 @@ function render() {
   renderDetails();
   renderInvoices();
   renderContracts();
+  renderQuotes();
   renderFiles();
   renderMessages();
   // a delivered project with only links: the "photos land here" note would say the opposite
@@ -344,6 +361,12 @@ function renderHero() {
   } else if (st === "delivered") {
     h = "Your project is delivered.";
     if (media && media.error) cta = heroAside("Your photos didn't load just now.", `<button class="btn btn-line" type="button" data-act="reload">Try again</button>`);
+  } else if ((st === "quoted" || st === "new") && quotes.some(q => q.status === "sent")) {
+    h = "Your quote is ready.";
+    cta = heroButton("pen", "Review your quote", "Review the scope and price, then approve it in your project details", 'data-act="quote"');
+  } else if ((st === "quoted" || st === "new") && quotes.some(q => q.status === "accepted")) {
+    h = "Your quote is approved.";
+    cta = heroAside("Nelson will confirm the agreement, deposit and date with you.");
   } else if (st === "quoted") {
     h = "Your quote is on the way.";
     cta = heroAside("When Nelson sends it, you can review and pay it right here.");
@@ -409,7 +432,7 @@ function renderRail() {
   const loc = p.location && shootPassed(p) ? cityOf(p.location) : p.location;
   if (loc) rows.push(["pin", "Location", esc(loc)]);
   (data.invoices || []).slice(0, 3).forEach((inv) => {
-    rows.push(["card", esc(inv.title), `<span class="amt">${money(inv.amount_cents)}</span>${chip(inv)}`]);
+    rows.push(["card", esc(inv.title), `<span class="amt">${money(inv.status === "paid" ? received(inv) : inv.amount_cents)}</span>${chip(inv)}`]);
   });
   $("#railFacts").innerHTML = rows.map(([ic, k, v]) =>
     `<li>${icon(ic, "fact-ico")}<div><span class="fact-k">${k}</span><span class="fact-v">${v}</span></div></li>`).join("");
@@ -446,12 +469,12 @@ function renderInvoices() {
   if (hide && currentTab() === "invoices") selectTab("photos");
   const box = $("#pInvoices");
   // rebuild only on change (the poll would drop keyboard focus), and never under a Pay mid-request
-  const key = JSON.stringify(inv.map((i) => [i.id, i.status, i.amount_cents, i.due_date, i.title, processing(i)])) + p.status;
+  const key = JSON.stringify(inv.map((i) => [i.id, i.status, i.amount_cents, i.due_date, i.title, i.paid_amount_cents, processing(i)])) + p.status + JSON.stringify(billing);
   if (key === lastInvKey || box.querySelector("[data-pay][disabled]")) return;
   lastInvKey = key;
-  const paying = sessionStorage.getItem("bk_paying");
+  const paying = sessionStore.getItem("bk_paying");
   box.innerHTML = inv.length ? inv.map((i) => {
-    if (i.status === "paid" && i.id === paying) sessionStorage.removeItem("bk_paying");
+    if (i.status === "paid" && i.id === paying) sessionStore.removeItem("bk_paying");
     const lines = (i.line_items || []).map((li) => esc(li.title || li.label)).filter(Boolean).join(" · ") || (i.kind === "deposit" ? "Booking deposit" : "");
     return `<div class="inv">
       ${icon("card", "fact-ico")}
@@ -462,8 +485,8 @@ function renderInvoices() {
           : i.due_date ? `Due ${longDate(i.due_date)}` : ""}</small>
       </div>
       <div class="inv-side">
-        <span class="amt">${money(i.amount_cents)}</span>
-        ${i.status === "paid" || processing(i) ? chip(i) : `<button class="btn btn-gold" type="button" data-pay="${esc(i.id)}"><span class="label">Pay now</span></button>`}
+        <span class="amt">${money(i.status === "paid" ? received(i) : i.amount_cents)}</span>
+        ${i.status === "paid" || processing(i) ? chip(i) : `<button class="btn btn-gold" type="button" data-pay="${esc(i.id)}"><span class="label">${billing?.billing_provider === "honeybook" ? "Pay in HoneyBook" : billing?.billing_provider === "unassigned" ? "Contact Nelson to pay" : "Pay now"}</span></button>`}
       </div>
     </div>`;
   }).join("") : `<div class="empty empty-sm">${icon("card", "empty-ico")}<p>${closed(p)
@@ -563,7 +586,7 @@ function storyboardTab() {
 /* ---------------- paid banner ---------------- */
 function paidBanner() {
   if (!JUST_PAID) return;
-  const inv = (data.invoices || []).find((i) => i.id === sessionStorage.getItem("bk_paying"));
+  const inv = (data.invoices || []).find((i) => i.id === sessionStore.getItem("bk_paying"));
   $("#paidText").textContent = inv && media && media.unlock && media.unlock.invoiceId === inv.id
     ? (media.unlock.held
       ? "Payment received, thank you. Your final video will be ready to download below in a few seconds, and your receipt is on its way to your email."
@@ -684,11 +707,12 @@ document.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-pay]");
   if (!btn) return;
   const label = btn.querySelector(".label") || btn;
+  if(billing?.billing_provider === "unassigned") { selectTab("messages"); $("#chatInput").focus(); label.textContent="Contact Nelson to pay"; return; }
   const was = label.textContent;
   btn.dataset.was = was;
   btn.disabled = true;
-  label.textContent = "Opening checkout…";
-  sessionStorage.setItem("bk_paying", btn.dataset.pay);
+  label.textContent = billing?.billing_provider === "honeybook" ? "Opening HoneyBook…" : "Opening checkout…";
+  sessionStore.setItem("bk_paying", btn.dataset.pay);
   try {
     const res = await fetch(`${BK.FUNCTIONS_BASE}/bk-create-checkout`, {
       method: "POST",
@@ -696,9 +720,11 @@ document.addEventListener("click", async (e) => {
       body: JSON.stringify({ invoice_id: btn.dataset.pay, token: TOKEN }),
     });
     const out = await res.json();
-    if (out.url) { location.href = out.url; return; }
+    if (out.url && checkoutUrl(out.url)) { location.href = out.url; return; }
     if (out.error === "already_paid") { label.textContent = "Already paid"; refresh(); return; }
-    label.textContent = out.error === "payments_not_configured" ? "Payments are coming online. Message Nelson." : "Try again";
+    label.textContent = out.error === "payments_not_configured" || out.error === "billing_provider_required" ? "Payment details need confirming. Message Nelson."
+      : out.error === "external_payment_required" ? "Ask Nelson for your HoneyBook invoice link."
+      : /expired|booking_unavailable/.test(out.error || "") ? "This date hold expired. Message Nelson before paying." : "Try again";
   } catch (_) {
     label.textContent = "Try again";
   }
@@ -774,5 +800,71 @@ pContracts.addEventListener("submit", async (e) => {
     label.textContent = "Sign contract";
     err.textContent = "Your signature didn't go through. Give it another try, or message Nelson and he'll sort it out.";
     err.hidden = false;
+  }
+});
+
+
+/* CRM quotes: token-scoped, version-bound approval; no client messages are sent here. */
+async function loadCrmPortal() {
+  const [q,b] = await Promise.allSettled([
+    BK.rpc("bk_crm_portal_quotes", {p_project:PID,p_token:TOKEN}),
+    BK.rpc("bk_crm_portal_billing", {p_project:PID,p_token:TOKEN}),
+  ]);
+  if(q.status === "fulfilled" && Array.isArray(q.value?.rows)) { quotes=q.value.rows; quoteError=""; }
+  else quoteError="Your quote couldn't load. Try again to see the latest version.";
+  if(b.status === "fulfilled" && b.value?.billing_provider) {
+    billing=b.value;
+    for(const inv of data?.invoices || []) { const paid=billing.paid_amounts?.find(p=>p.id===inv.id); if(paid) inv.paid_amount_cents=paid.paid_amount_cents; }
+  }
+}
+function renderQuotes() {
+  const block=$("#quotesBlock"), box=$("#pQuotes");
+  if(!block || !box) return;
+  block.hidden=!quotes.length && !quoteError;
+  const key=JSON.stringify([quotes,quoteError]);
+  if(key===lastQuoteKey || quoteBusy) return;
+  lastQuoteKey=key;
+  if(quoteError) { box.innerHTML=`<p role="status">${esc(quoteError)}</p><button class="btn btn-line" type="button" data-quotes-retry>Try again</button>`; return; }
+  const today=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+  box.innerHTML=quotes.map(q=>{
+    const expired=q.valid_until && q.valid_until<today;
+    const open=q.status==="sent" && !expired;
+    return `<article class="ct quote-document">
+      <div class="ct-head"><b>${esc(q.title)}</b><span class="chip ${q.status==="accepted"?"chip-paid":"chip-due"}">${esc(expired && q.status==="sent"?"Expired":q.status)}</span></div>
+      <dl class="quote-lines">${q.lines.map(l=>`<div><dt>${esc(l.description)} <small>(${l.quantity} × ${money(l.unit_cents)})</small></dt><dd>${money(Math.round(l.quantity*l.unit_cents))}</dd></div>`).join("")}</dl>
+      <p class="quote-total">Total <strong>${money(q.total_cents)}</strong></p>
+      ${q.notes?`<p class="quote-notes">${esc(q.notes)}</p>`:""}
+      ${q.valid_until?`<p>Valid through ${longDate(q.valid_until)}</p>`:""}
+      ${q.status==="accepted"?`<p class="ct-signed">Approved by ${esc(q.accepted_by)} on ${new Date(q.accepted_at).toLocaleDateString("en-US",{timeZone:"America/Chicago"})}</p>`:""}
+      ${expired && q.status==="sent"?`<p>Please ask Nelson for an updated quote.</p>`:""}
+      ${open?`<form class="ct-sign" data-quote-form="${esc(q.id)}" data-version="${esc(q.version)}">
+        <div class="field"><label for="quote-name-${esc(q.id)}">Your full name</label><input id="quote-name-${esc(q.id)}" name="signer" autocomplete="name" maxlength="120" required></div>
+        <label class="ct-agree"><input type="checkbox" name="agree" required><span>I approve the scope and price shown above. The date is confirmed after the required agreement and deposit.</span></label>
+        <button type="submit" class="btn btn-gold">Approve quote</button><p class="form-err" role="alert" hidden></p>
+      </form>
+      <details class="quote-decline"><summary>Decline this quote</summary><form data-quote-decline="${esc(q.id)}" data-version="${esc(q.version)}"><label>Note for Nelson (optional)<textarea name="note" maxlength="2000" rows="2"></textarea></label><button type="submit" class="btn btn-line">Confirm decline</button><p class="form-err" role="alert" hidden></p></form></details>`:""}
+    </article>`;
+  }).join("");
+}
+document.addEventListener("click",async e=>{
+  if(e.target.closest("[data-quotes-retry]")) { await loadCrmPortal(); lastQuoteKey=""; renderQuotes(); }
+  if(e.target.closest('[data-act="quote"]')) { selectTab("details"); $("#quotesBlock")?.scrollIntoView({block:"start"}); }
+});
+document.addEventListener("submit",async e=>{
+  const form=e.target.closest("[data-quote-form],[data-quote-decline]");
+  if(!form) return;
+  e.preventDefault(); if(quoteBusy || !form.reportValidity()) return;
+  quoteBusy=true; const btn=form.querySelector('button[type="submit"]'), message=form.querySelector('[role="alert"]');
+  btn.disabled=true; message.hidden=true;
+  const accept=!!form.dataset.quoteForm;
+  try {
+    const args={p_project:PID,p_token:TOKEN,p_quote:form.dataset.quoteForm || form.dataset.quoteDecline,p_version:form.dataset.version};
+    if(accept) args.p_signer=form.elements.signer.value.trim(); else args.p_note=form.elements.note.value.trim();
+    const result=await BK.rpc(accept?"bk_crm_accept_quote":"bk_crm_decline_quote",args);
+    if(!result?.ok) throw Error("quote_not_saved");
+    await loadCrmPortal(); quoteBusy=false; lastQuoteKey=""; heroKey=""; renderQuotes(); renderHero();
+  } catch(error) {
+    message.textContent=/expired/i.test(error.message)?"This quote has expired. Ask Nelson for an updated version.":/changed|not_found/i.test(error.message)?"This quote changed. Reload the page to review the latest version.":"That didn't save. Your information is still here. Try again.";
+    message.hidden=false; btn.disabled=false; quoteBusy=false;
   }
 });

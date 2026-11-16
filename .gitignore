@@ -1,0 +1,11 @@
+node_modules/
+output/
+.env
+.env.*
+!.env.example
+supabase/.temp/
+playwright-report/
+test-results/
+*.log
+
+.site-build/

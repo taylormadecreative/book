@@ -50,6 +50,13 @@ Deno.test("stats: unpaid, this month's money, new leads", () => {
   assertEquals(s.monthName, "October");
 });
 
+Deno.test("discounted paid invoices report the amount collected and no phantom balance", () => {
+  const invoices=[{amount_cents:5000,paid_amount_cents:3000,status:"paid",paid_at:"2026-11-16T18:00:00Z"}];
+  assertEquals(invoiceTotals(invoices),{invoiced:5000,paid:3000,due:0,count:1});
+  assertEquals(stats([{status:"delivered",bk_invoices:invoices}],0,new Date("2026-11-16T20:00:00Z")).collected,3000);
+  assertEquals(invoiceTotals([{...invoices[0],paid_amount_cents:0}]).paid,0);
+});
+
 Deno.test("rows merge activity with the project and escape client text", () => {
   const act = { id: "p1", client_name: "<b>Jas</b>", title: "Jas — Brand Content", service: "brand_content", last_at: "2026-10-26T14:00:00Z", last_kind: "message", last_summary: "Hi <i>there</i>" };
   const proj = { id: "p1", client_name: "<b>Jas</b>", title: act.title, service: "brand_content", company: "Okafor & Co", client_email: "j@x.com", status: "quoted", created_at: "2026-10-20T14:00:00Z", bk_invoices: [{ amount_cents: 125000, status: "sent" }] };

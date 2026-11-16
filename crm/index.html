@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="robots" content="noindex,nofollow">
+    <meta name="theme-color" content="#0b0b0d">
+    <title>CRM | Taylormade Creative</title>
+    <link rel="icon" href="../assets/img/inbox-192.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="../css/crm-workspace.css?v=1">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to workspace</a>
+    <section class="login" id="loginView" aria-labelledby="loginTitle">
+      <a class="wordmark" href="../">TAYLORMADE<i>/</i>CREATIVE</a>
+      <p class="eyebrow">Studio CRM</p>
+      <h1 id="loginTitle">Your next move.</h1>
+      <p class="muted">Sign in to manage leads, projects and follow-ups.</p>
+      <form id="loginForm">
+        <label>Email<input
+            id="email"
+            type="email"
+            autocomplete="username"
+            required
+          ></label>
+        <label>Password<input
+            id="password"
+            type="password"
+            autocomplete="current-password"
+            required
+          ></label>
+        <button class="btn primary" id="loginBtn">Sign in</button>
+        <p id="loginErr" class="error" role="alert"></p>
+      </form>
+      <button class="btn light" id="googleBtn" type="button">
+        Continue with Google
+      </button>
+    </section>
+    <div id="appView" hidden>
+      <header class="app-header">
+        <a href="./" class="wordmark">TAYLORMADE<i>/</i>CREATIVE</a><span
+          class="app-tag"
+        >CRM</span>
+        <nav class="tool-links" aria-label="Studio tools">
+          <a href="../inbox/">Inbox</a><a href="../admin.html">Studio</a><a
+            href="../schedule.html"
+          >Schedule</a><a href="../content.html">Content</a><a
+            href="../growth.html"
+          >Growth</a>
+        </nav>
+        <button class="signout" id="logoutBtn">Sign out</button>
+      </header>
+      <div class="app-layout">
+        <aside class="sidebar">
+          <p class="eyebrow">Your studio, in motion</p>
+          <nav id="mainNav" aria-label="CRM workspace">
+            <a href="?view=today" data-view="today"><span>01</span>Today <b
+                id="dueBadge"
+                hidden
+              ></b></a>
+            <a href="?view=pipeline" data-view="pipeline"><span
+              >02</span>Pipeline</a>
+            <a href="?view=clients" data-view="clients"><span
+              >03</span>Clients</a>
+            <a href="?view=reports" data-view="reports"><span
+              >04</span>Reports</a>
+          </nav>
+          <button class="btn primary" id="newLeadBtn">+ Add lead</button>
+          <div class="sidebar-note">
+            <span class="small-dot"></span><p>
+              Every open project deserves a next action.
+            </p>
+          </div>
+        </aside>
+        <main id="main" tabindex="-1">
+          <div id="statusBanner" role="alert" hidden></div>
+          <div id="newLead" hidden></div>
+          <div id="workspace" aria-busy="true">
+            <div class="skeleton" aria-label="Loading workspace">
+              <i></i><i></i><i></i>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"
+    ></script>
+    <script src="../js/config.js"></script>
+    <script type="module" src="../js/crm-workspace.js?v=1"></script>
+  </body>
+</html>

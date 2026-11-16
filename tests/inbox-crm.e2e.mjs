@@ -1,11 +1,13 @@
+import { fileURLToPath } from "node:url";
 // Stubbed UI test for the Inbox CRM (/inbox/). Serves the repo locally; every Supabase call is intercepted, never prod.
 // Run: node tests/inbox-crm.e2e.mjs        Screenshots: SHOTS=/some/dir node tests/inbox-crm.e2e.mjs
-import { chromium } from "/Users/nelsontaylor/.cache/pglite-rig/node_modules/playwright/index.mjs";
+import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { build } from "./fixtures/inbox-crm-fixture.mjs";
+import { stats, mergeRow, matches } from "../js/inbox-crm-view.js";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const PORT = 18732, BASE = `http://localhost:${PORT}/inbox/`;
 const SHOTS = process.env.SHOTS || "";
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
@@ -32,6 +34,15 @@ async function newPage(viewport, { evil = false } = {}) {
     const req = route.request(), url = req.url(), method = req.method();
     const json = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });
     const body = () => { try { return JSON.parse(req.postData() || "{}"); } catch (_) { return {}; } };
+    if (url.includes("/rpc/bk_crm_inbox")) {
+      const b=body(), waiting=new Set(fx.needs.map(r=>r.id)), activity=new Map(fx.all.map(r=>[r.id,r]));
+      const projects=fx.projects.map(p=>({...p,status:fx.items[p.id]?.extra.status || p.status}));
+      const rows=projects.map(p=>mergeRow(activity.get(p.id),p,waiting.has(p.id))).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at));
+      const rules={needs:r=>r.waiting,leads:r=>["new","quoted"].includes(r.status),booked:r=>["booked","in_production"].includes(r.status),delivered:r=>r.status==="delivered",unpaid:r=>r.due>0,all:()=>true};
+      const counts=Object.fromEntries(Object.entries(rules).map(([k,fn])=>[k,rows.filter(fn).length]));
+      const filtered=rows.filter(r=>matches(r,b.p_query) && (rules[b.p_filter] || rules.all)(r));
+      return json({rows:filtered.slice(b.p_offset,b.p_offset+b.p_limit),total:filtered.length,counts,stats:stats(projects,waiting.size)});
+    }
     if (url.includes("/rpc/bk_inbox_list")) return json(body().p_filter === "all" ? fx.all : fx.needs);
     if (url.includes("/rpc/bk_inbox_item")) { log.itemCalls++; const it = fx.items[body().p_project]; return it ? json(it.item) : json({ message: "not found" }, 400); }
     if (url.includes("/rpc/bk_inbox_send")) { log.sends.push(body()); return json({ id: "m1", duplicate: false }); }
@@ -68,6 +79,7 @@ async function newPage(viewport, { evil = false } = {}) {
 const noSideScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 const shot = async (page, name, opts = {}) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png`, ...opts }); };
 // the composer stays hidden while a conversation loads, so a visible "Hi …" draft belongs to the open one
+const listReady = page => page.waitForFunction(() => document.querySelector("#list").getAttribute("aria-busy") !== "true");
 const draftReady = (page) => page.waitForFunction(() => !document.querySelector("#composer").hidden && document.querySelector("#draft").value.startsWith("Hi "), null, { timeout: 8000 });
 
 /* ---------- desktop ---------- */
@@ -93,6 +105,22 @@ const draftReady = (page) => page.waitForFunction(() => !document.querySelector(
   await ok((await page.$$eval(".slist a[data-go]", (a) => a.length)) === 1, "earlier project missing");
   await ok((await page.getAttribute("#studioBtn", "href")) === `/admin.html?p=${first.id}`, "Open in Studio link wrong");
   await ok(noSideScroll(page), "desktop scrolls sideways");
+  // Web fonts can be unavailable or still loading. Linux sans-serif fallbacks
+  // are wider than the condensed fonts installed on Nelson's Mac.
+  const fallbackFonts = await page.addStyleTag({ content: ":root { --font-display: Arial, sans-serif; --font-ui: Arial, sans-serif; --font-mono: monospace; --font-body: Arial, sans-serif; }" });
+  const alertsText = await page.textContent("#alertsLabel");
+  await page.locator("#alertsLabel").evaluate((el) => el.textContent = "Alerts on");
+  for (const width of [360, 390, 760, 820, 959, 1024, 1179, 1280, 1439, 1440, 1512, 1799, 1800]) {
+    await page.setViewportSize({ width, height: 900 });
+    await ok(noSideScroll(page), `fallback fonts overflow at ${width}px`);
+    await ok(page.evaluate(() => [...document.querySelectorAll(".crm-nav > *")]
+      .filter((el) => getComputedStyle(el).display !== "none")
+      .every((el) => { const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })), `fallback fonts hide studio tools at ${width}px`);
+    await ok(page.evaluate(() => document.querySelector("#topBar").getBoundingClientRect().height <= 61), `fallback fonts increase the fixed header height at ${width}px`);
+  }
+  await page.locator("#alertsLabel").evaluate((el, text) => el.textContent = text, alertsText);
+  await fallbackFonts.evaluate((el) => el.remove());
+  await page.setViewportSize({ width: 1512, height: 900 });
   await page.waitForTimeout(SHOTS ? 600 : 50);
   await shot(page, "1-desktop-new-inquiry");
 
@@ -140,12 +168,15 @@ const draftReady = (page) => page.waitForFunction(() => !document.querySelector(
 
   // filters
   await page.click('#filters [data-f="leads"]');
+  await listReady(page);
   const leads = await page.$$eval("a.crow", (r) => r.map((x) => x.dataset.id));
   await ok(leads.length === 2 && leads.includes(fx.id(1)) && leads.includes(fx.id(2)), "Leads filter wrong: " + leads.length);
   await page.click('#filters [data-f="all"]');
+  await listReady(page);
   await ok((await page.$$eval("a.crow", (r) => r.length)) === fx.projects.length, "All should list every project");
   // the Unpaid number is a shortcut to the rows that owe money
   await page.click('#stats [data-f="unpaid"]');
+  await listReady(page);
   const unpaid = await page.$$eval("a.crow", (r) => r.map((x) => x.dataset.id).sort());
   await ok(unpaid.join() === [fx.id(2), fx.id(3), fx.id(5)].sort().join(), "Unpaid shortcut wrong: " + unpaid.length);
   await ok((await page.$eval('#filters [aria-pressed="true"]', (b) => b.dataset.f)) === "unpaid", "Unpaid pill not pressed");
@@ -154,15 +185,19 @@ const draftReady = (page) => page.waitForFunction(() => !document.querySelector(
   await page.keyboard.press("/");
   await ok(page.evaluate(() => document.activeElement.id === "search"), "/ didn't focus search");
   await page.keyboard.type("walker");
+  await listReady(page);
   await ok((await page.$$eval("a.crow", (r) => r.length)) === 1, "search didn't narrow");
   await page.keyboard.press("Escape");
   await ok((await page.inputValue("#search")) === "", "Esc didn't clear search");
   await page.fill("#search", "zzqx");
+  await listReady(page);
   await ok(page.isVisible("[data-clearq]"), "no-match state missing");
   await page.click("[data-clearq]");
+  await listReady(page);
 
   // ↓ walks the list
   await page.click('#filters [data-f="needs"]');
+  await listReady(page);
   await page.click(`a.crow[data-id="${fx.needs[0].id}"]`); await draftReady(page);
   await page.click(".thread");
   await page.keyboard.press("ArrowDown");
@@ -187,7 +222,7 @@ const draftReady = (page) => page.waitForFunction(() => !document.querySelector(
   await ok(log.sends.length === 0, "Undo didn't cancel the send");
   await ok((await page.inputValue("#draft")).includes("I'll run camera"), "draft lost after Undo");
   await page.click("#sendBtn"); await page.click("#sendBtn", { force: true });
-  await page.waitForFunction(() => /Sent to/.test(document.querySelector("#toast").textContent), null, { timeout: 9000 });
+  await page.waitForFunction(() => /Reply queued for/.test(document.querySelector("#toast").textContent), null, { timeout: 9000 });
   await ok(log.sends.length === 1 && log.sends[0].p_body.includes("run camera"), `expected exactly one send, got ${log.sends.length}`);
   // after a send on a computer the box starts empty (no re-suggested pitch)
   await page.waitForFunction(() => !document.querySelector("#composer").hidden && document.querySelector("#draft").value === "");
@@ -308,7 +343,7 @@ for (const vp of [{ width: 390, height: 844 }, { width: 320, height: 640 }]) {
   await page.click('[data-tab="thread"]');
   await page.fill("#draft", "Hi Marcus,\n\nThe 21st works.\n\n— Nelson");
   await page.click("#sendBtn");
-  await page.waitForFunction(() => /Sent to/.test(document.querySelector("#toast").textContent), null, { timeout: 9000 });
+  await page.waitForFunction(() => /Reply queued for/.test(document.querySelector("#toast").textContent), null, { timeout: 9000 });
   await page.waitForSelector(".lpane", { state: "visible" });
   await ok(!/\?p=/.test(page.url()), "phone stayed in the conversation after sending");
   await ok(errors.length === 0, `phone page errors: ` + errors.join(" | "));

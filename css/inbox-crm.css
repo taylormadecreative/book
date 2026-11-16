@@ -38,6 +38,8 @@
 }
 
 html { scroll-behavior: auto; } /* landing on the newest message must be instant, not a glide */
+.inbox-pages { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 18px 12px; color: var(--muted); font: 13px var(--font-ui); }
+.inbox-pages button:disabled { opacity: .45; cursor: default; }
 body { background: var(--ink); font-size: 15px; }
 body::after { display: none; } /* the film grain belongs to the marketing page */
 .sr-only { position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -198,7 +200,7 @@ button.crm-stat:active { transform: scale(0.97); }
 .lempty p { margin: 0 0 0.3rem; }
 .lempty .lempty-big { font-family: var(--font-display); font-size: 1.7rem; text-transform: uppercase; color: var(--text); }
 .lempty .btn { margin-top: 0.9rem; }
-.lpane-foot { display: flex; align-items: center; gap: 1.3rem; padding: 0.75rem 1.25rem; border-top: 1px solid var(--ink-line); }
+.lpane-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 0.65rem 1.3rem; padding: 0.75rem 1.25rem; border-top: 1px solid var(--ink-line); }
 .lpane-foot a, .lpane-foot .linkish { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.35rem 0; background: none; border: 0; text-decoration: none; font: 500 0.86rem var(--font-ui); color: var(--muted); transition: color 0.15s var(--ease); }
 .lpane-foot svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .lpane-foot .linkish { margin-left: auto; }
@@ -437,6 +439,16 @@ button.crm-stat:active { transform: scale(0.97); }
   .lstats .crm-stat b { font-size: 1.45rem; }
   .lstats .crm-stat > span { font-family: var(--font-mono); font-size: 0.6875rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 }
+/* The full-width fallback fonts are wider than Plex/Anton. Keep every tool
+   visible on desktop while fonts load by giving the stats bounded columns. */
+@media (min-width: 1440px) and (max-width: 1799px) {
+  .crm-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); flex: 1; min-width: 0; }
+  .crm-stats .crm-stat { min-width: 0; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0.2rem; padding: 0 0.8rem; }
+  .crm-stats .crm-stat b { font-size: 1.5rem; }
+  .crm-stats .crm-stat > span { font-size: 0.72rem; line-height: 1.2; white-space: normal; }
+  .crm-stats .n-long { display: none; }
+  .crm-stats .n-short { display: inline; }
+}
 @media (min-width: 760px) and (max-width: 959px), (max-width: 374px) {
   .lstats .crm-stat { padding: 0.5rem 0.55rem; }
   .lstats .crm-stat b { font-size: 1.15rem; }
@@ -446,6 +458,12 @@ button.crm-stat:active { transform: scale(0.97); }
   :root { --list-w: 320px; }
   .whead { grid-template-columns: minmax(0, 1fr); grid-template-areas: "id" "acts" "tabs"; }
   .whead-acts { justify-content: flex-start; }
+}
+/* The page title already identifies the Inbox. Drop the duplicate header tag
+   before reducing navigation, including while wider fallback fonts are active. */
+@media (max-width: 959px) {
+  .crm-bar .crm-tag { display: none; }
+  .crm-nav { gap: 0.9rem; }
 }
 /* short laptop screens: give the thread the height, not the header */
 @media (min-width: 760px) and (max-height: 860px) {

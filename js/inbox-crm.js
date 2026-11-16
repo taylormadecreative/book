@@ -5,17 +5,16 @@ import { esc, fmtWhen, fmtDay, smsHref, telHref, pushSupport, newKey, urlB64ToUi
 import { buildDraft, draftOptions, greetName } from "./inbox-drafts.js?v=2";
 import { initPitches } from "./inbox-pitches.js?v=2";
 import { STAGES, STAGE_LABEL, FILTERS, BOOKING_LABEL, isBooked, replyIsEmpty, money, initials, firstName, stageChip, invoiceTotals,
-  dayGroup, stats, mergeRow, matches, rowHtml, timeline } from "./inbox-crm-view.js?v=1";
+  dayGroup, rowHtml, timeline } from "./inbox-crm-view.js?v=2";
 
 const sb = window.supabase.createClient(window.BK.SUPABASE_URL, window.BK.SUPABASE_KEY);
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const HOME = "/inbox/";
 const SEND_DELAY_MS = 5000;
-const PROJ_COLS = "id, client_name, client_email, client_phone, company, service, title, status, event_date, created_at, updated_at, inbox_handled_at, bk_invoices(amount_cents, status, paid_at)";
-const ITEM_COLS = "id, status, notes_internal, access_token, referral_source, bk_invoices(id, title, kind, amount_cents, status, created_at, paid_at, due_date), bk_messages(sender, body, created_at)";
+const ITEM_COLS = "id, status, notes_internal, access_token, referral_source, bk_invoices(id, title, kind, amount_cents, paid_amount_cents, status, created_at, paid_at, due_date), bk_messages(sender, body, created_at)";
 const state = {
-  filter: "needs", q: "", needs: [], all: [], projects: new Map(), projectsOk: false, loaded: false,
+  filter: "needs", q: "", rows: [], total: 0, offset: 0, counts: {}, summary: null, listError: "", loaded: false,
   sel: null, item: null, extra: null, slots: [], key: newKey(), sending: false, sendingId: null, pending: null,
   draftLoading: false, listY: 0, pendingText: false, poll: null, seq: 0, listSeq: 0, writeAt: 0,
 };
@@ -137,64 +136,54 @@ function showEmpty() {
 
 /* ---------- list ---------- */
 async function loadList() {
-  const mine = ++state.listSeq; // only the newest load may draw: an older poll must not bring back a row he just handled
+  const mine = ++state.listSeq;
   if (!state.loaded) $("#list").innerHTML = skeleton();
-  const [needs, all, projs] = await Promise.allSettled([
-    rpc("bk_inbox_list", { p_filter: "needs", p_before: null }),
-    rpc("bk_inbox_list", { p_filter: "all", p_before: null }),
-    table(() => sb.from("bk_projects").select(PROJ_COLS).order("updated_at", { ascending: false }).limit(400)),
-  ]);
-  if (mine !== state.listSeq) return;
-  if (needs.status === "rejected") {
-    if (!state.loaded) {
-      $("#list").removeAttribute("aria-busy");
-      $("#list").innerHTML = `<div class="lempty"><p>Couldn't load the inbox.</p><button type="button" class="btn btn-ghost btn-sm retry">Try again</button></div>`;
-    }
-    return;
-  }
-  const list = (v) => (Array.isArray(v) ? v : []);
-  state.needs = list(needs.value);
-  if (all.status === "fulfilled") state.all = list(all.value);
-  if (projs.status === "fulfilled" && Array.isArray(projs.value)) { state.projects = new Map(projs.value.map((p) => [p.id, p])); state.projectsOk = true; }
-  state.loaded = true;
-  $("#list").removeAttribute("aria-busy");
-  renderStats(); renderFilters(); renderList();
+  $("#list").setAttribute("aria-busy", "true");
+  try {
+    const result = await rpc("bk_crm_inbox", {
+      p_filter: state.q.trim() ? "all" : state.filter, p_query: state.q.trim(),
+      p_offset: state.offset, p_limit: 50,
+    });
+    if (mine !== state.listSeq) return;
+    if (!result || !Array.isArray(result.rows) || !result.stats || !result.counts) throw new Error("crm_setup_required");
+    state.rows = result.rows; state.total = result.total;
+    state.counts = result.counts; state.summary = result.stats;
+    state.loaded = true; state.listError = "";
+    renderStats(); renderFilters(); renderList();
+  } catch (error) {
+    if (mine !== state.listSeq) return;
+    const setup = /crm_setup|required|function.*not|schema cache|PGRST202/i.test(error.message || "");
+    state.listError = setup ? "The CRM update needs its database migration. Your existing data is still in Studio." : "Couldn't refresh the inbox. Check your connection and try again.";
+    renderFilters();
+    renderList();
+  } finally { if (mine === state.listSeq) $("#list").removeAttribute("aria-busy"); }
 }
 function skeleton() {
   return Array.from({ length: 6 }, () => `<div class="crow-sk" aria-hidden="true"><i></i><span><b></b><b></b><b></b></span></div>`).join("");
 }
-function allRows() {
-  const act = new Map(state.all.map((r) => [r.id, r]));
-  state.needs.forEach((r) => act.set(r.id, r));
-  const waiting = new Set(state.needs.map((r) => r.id));
-  const ids = new Set([...act.keys(), ...state.projects.keys()]);
-  return [...ids].map((id) => mergeRow(act.get(id), state.projects.get(id), waiting.has(id)))
-    .filter((r) => r.client_name)
-    .sort((a, b) => Date.parse(b.at || 0) - Date.parse(a.at || 0));
-}
-const IN = { leads: ["new", "quoted"], booked: ["booked", "in_production"], delivered: ["delivered"] };
+function allRows() { return state.rows; }
 function visibleRows() {
-  const rows = allRows();
-  if (state.q.trim()) return rows.filter((r) => matches(r, state.q)); // search looks through everything
-  if (state.filter === "needs") return rows.filter((r) => r.waiting);
-  if (IN[state.filter]) return rows.filter((r) => IN[state.filter].includes(r.status));
-  if (state.filter === "unpaid") return rows.filter((r) => r.due > 0);
-  return rows;
+  if (state.filter === "all" && !state.q.trim() && state.item && !state.rows.some(r => r.id === state.sel)) {
+    const p=state.item.project,x=state.extra||{},totals=invoiceTotals(x.bk_invoices);
+    return [{id:p.id,client_name:p.client_name,title:p.title,service:p.service,company:p.company,email:p.client_email,phone:p.client_phone,status:x.status,
+      at:p.created_at,created_at:p.created_at,waiting:!p.inbox_handled_at,due:totals.due,last_kind:null,last_summary:null},...state.rows];
+  }
+  return state.rows;
 }
 function renderFilters() {
-  const rows = allRows();
-  const n = { needs: rows.filter((r) => r.waiting).length, all: rows.length };
-  Object.keys(IN).forEach((k) => { n[k] = rows.filter((r) => IN[k].includes(r.status)).length; });
-  n.unpaid = rows.filter((r) => r.due > 0).length;
-  $("#filters").innerHTML = FILTERS
-    .filter(([k]) => k === "needs" || k === "all" || (state.projectsOk && (k !== "unpaid" || n.unpaid)))
-    .map(([k, label]) => `<button type="button" data-f="${k}" aria-pressed="${state.filter === k && !state.q.trim()}">${label}<span>${n[k]}</span></button>`).join("")
+  const n = state.counts;
+  $("#filters").innerHTML = FILTERS.map(([k, label]) =>
+    `<button type="button" data-f="${k}" aria-pressed="${state.filter === k && !state.q.trim()}">${label}<span>${n[k] ?? "…"}</span></button>`).join("")
     + `<a class="lf-pitches" href="?view=pitches" data-pitches>Pitches</a>`;
 }
 function renderList() {
   const rows = visibleRows(), now = new Date();
   const q = state.q.trim();
-  $("#listCount").textContent = q ? `${rows.length} found` : "";
+  $("#listCount").textContent = q ? `${state.total} found` : "";
+  if (state.listError) {
+    $("#list").innerHTML = `<div class="lempty" role="status"><p>${esc(state.listError)}</p><button type="button" class="btn btn-ghost btn-sm retry">Try again</button><a href="/admin.html">Open Studio</a></div>`;
+    return;
+  }
   if (!rows.length) {
     $("#list").innerHTML = q
       ? `<div class="lempty"><p>No one matches “${esc(q)}”.</p><button type="button" class="btn btn-ghost btn-sm" data-clearq>Clear search</button></div>`
@@ -210,17 +199,18 @@ function renderList() {
     html += rowHtml(r, { now, sel: r.id === state.sel });
   });
   const focusId = document.activeElement?.closest?.(".crow")?.dataset.id;
-  $("#list").innerHTML = html;
+  const pager = state.total > 50 ? `<div class="inbox-pages"><button class="btn btn-ghost btn-sm" type="button" data-page="prev" ${state.offset === 0 ? "disabled" : ""}>Previous</button><span>${state.offset + 1}–${Math.min(state.offset + rows.length, state.total)} of ${state.total}</span><button class="btn btn-ghost btn-sm" type="button" data-page="next" ${state.offset + rows.length >= state.total ? "disabled" : ""}>Next</button></div>` : "";
+  $("#list").innerHTML = html + pager;
   if (focusId) $(`.crow[data-id="${focusId}"]`)?.focus({ preventScroll: true });
 }
 function renderStats() {
-  const s = stats(state.projectsOk ? [...state.projects.values()] : [], state.needs.length);
+  const s = state.summary; if (!s) return;
   // each number is also a shortcut to the rows behind it
   const stat = (n, label, shortLabel, shown = n, f = "") =>
     `<${f ? `button type="button" data-f="${f}"` : "div"} class="crm-stat${n ? "" : " zero"}"><b>${shown}</b><span><span class="lbl-long">${label}</span><span class="lbl-short">${shortLabel}</span></span></${f ? "button" : "div"}>`;
-  const waiting = state.needs.length >= 30 ? "30+" : String(s.waiting);
+  const waiting = String(s.waiting);
   $("#stats").innerHTML = $("#statsMini").innerHTML = stat(s.waiting, "Waiting on you", "Waiting", waiting, "needs")
-    + (state.projectsOk
+    + (state.summary
       ? stat(s.newLeads, s.newLeads === 1 ? "New lead this week" : "New leads this week", "New leads", s.newLeads, "leads")
         + stat(s.unpaid, "Unpaid invoices", "Unpaid", `<span class="n-long">${money(s.unpaid)}</span><span class="n-short">${money(s.unpaid, true)}</span>`, s.unpaid ? "unpaid" : "")
         + stat(s.collected, `Collected in ${s.monthName.slice(0, 3)}`, "Collected", `<span class="n-long">${money(s.collected)}</span><span class="n-short">${money(s.collected, true)}</span>`)
@@ -239,20 +229,26 @@ $("#filters").addEventListener("click", (e) => {
   setFilter(b.dataset.f);
 });
 function setFilter(f) {
-  state.filter = f;
+  state.filter = f; state.offset = 0;
   if (state.q) { state.q = ""; $("#search").value = ""; }
-  renderFilters(); renderList();
+  renderFilters(); loadList();
   $("#list").scrollTop = 0;
   $("#srStatus").textContent = `${visibleRows().length} in ${(FILTERS.find(([k]) => k === f) || [, "All"])[1]}`;
 }
-$("#search").addEventListener("input", (e) => { state.q = e.target.value; renderFilters(); renderList(); });
+let searchTimer;
+$("#search").addEventListener("input", (e) => {
+  state.q = e.target.value; state.offset = 0; ++state.listSeq; $("#list").setAttribute("aria-busy", "true");
+  clearTimeout(searchTimer); searchTimer = setTimeout(loadList, 180);
+});
 $("#search").addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && e.target.value) { e.preventDefault(); e.target.value = ""; state.q = ""; renderFilters(); renderList(); }
-  if (e.key === "Enter") { const first = $(".crow"); if (first) { e.preventDefault(); first.click(); } }
+  if (e.key === "Escape" && e.target.value) { e.preventDefault(); e.target.value = ""; state.q = ""; state.offset = 0; clearTimeout(searchTimer); loadList(); }
+  if (e.key === "Enter" && $("#list").getAttribute("aria-busy") !== "true") { const first = $(".crow"); if (first) { e.preventDefault(); first.click(); } }
 });
 $("#list").addEventListener("click", (e) => {
   if (e.target.closest("button.retry")) { loadList(); return; }
-  if (e.target.closest("[data-clearq]")) { $("#search").value = ""; state.q = ""; renderFilters(); renderList(); $("#search").focus(); return; }
+  const page = e.target.closest("[data-page]");
+  if (page) { state.offset = Math.max(0, state.offset + (page.dataset.page === "next" ? 50 : -50)); loadList(); $("#list").scrollTop = 0; return; }
+  if (e.target.closest("[data-clearq]")) { $("#search").value = ""; state.q = ""; state.offset = 0; loadList(); $("#search").focus(); return; }
   const f = e.target.closest("[data-f]"); if (f) { setFilter(f.dataset.f); return; }
   const a = e.target.closest("a.crow"); if (!a) return;
   if (e.metaKey || e.ctrlKey || e.shiftKey) return; // let a new tab open
@@ -267,8 +263,8 @@ function go(id, { keys = false } = {}) {
 }
 // a link to a conversation outside the current filter (an alert, an earlier project) switches to All so it shows as selected
 function revealRow(id) {
-  if (!state.q.trim() && state.loaded && !visibleRows().some((r) => r.id === id) && allRows().some((r) => r.id === id)) {
-    state.filter = "all"; renderFilters();
+  if (!state.q.trim() && state.loaded && !visibleRows().some((r) => r.id === id)) {
+    state.filter = "all"; state.offset = 0; loadList(); renderFilters();
   }
   renderList();
   $(`.crow[data-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
@@ -329,7 +325,7 @@ async function openItem(id, { fresh = false, focus = false } = {}) {
   state.key = sendKeyFor(id);
   $("#composer").hidden = false; // before the thread draws, so "scroll to the newest" measures the real height
   $("#replyLabel").textContent = `Reply to ${greetName(item.project.client_name)}`;
-  renderHead(); renderThread(true); renderSide();
+  renderHead(); renderThread(true); renderSide(); renderList();
   if (focus) $("#wname").focus({ preventScroll: true });
   $("#srStatus").textContent = `Opened ${item.project.client_name}`;
   state.slots = await openSlots(item);
@@ -515,9 +511,9 @@ $("#side").addEventListener("change", async (e) => {
   sel.disabled = true; state.writeAt = Date.now();
   try {
     await saveProject(id, { status: next });
-    const pr = state.projects.get(id); if (pr) pr.status = next;
+    const pr = state.rows.find(r => r.id === id); if (pr) pr.status = next;
     if (state.item && state.item.project.id === id) { state.extra.status = next; renderHead(); }
-    renderFilters(); renderList(); renderStats();
+    await loadList();
     toast(`Moved to ${STAGE_LABEL[next]}`);
   } catch (_) { sel.value = prev; toast("Couldn't change the stage. Try again."); }
   finally { sel.disabled = false; sel.blur(); }
@@ -554,8 +550,28 @@ async function copy(text, done) {
 /* tabs (phones and tablets: Messages | Client & deal) */
 function setTab(tab) {
   $("#wbody").dataset.tab = tab;
-  $$(".wtabs [role=tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
+  syncPaneAccessibility();
 }
+function syncPaneAccessibility() {
+  const split = window.matchMedia("(min-width: 1180px)").matches;
+  const active = $("#wbody").dataset.tab;
+  $(".wtabs").setAttribute("role", split ? "group" : "tablist");
+  $$(".wtabs [data-tab]").forEach(b => {
+    if (split) { b.removeAttribute("role"); b.removeAttribute("aria-selected"); b.removeAttribute("tabindex"); }
+    else { b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(b.dataset.tab === active)); b.tabIndex = b.dataset.tab === active ? 0 : -1; }
+  });
+  for (const [id,tab] of [["conv","thread"],["side","side"]]) {
+    const pane = $("#"+id); pane.setAttribute("role", split ? "region" : "tabpanel");
+    pane.setAttribute("aria-hidden", String(!split && active !== tab));
+  }
+}
+window.matchMedia("(min-width: 1180px)").addEventListener("change", syncPaneAccessibility);
+syncPaneAccessibility();
+$(".wtabs").addEventListener("keydown", e => {
+  if (!["ArrowLeft","ArrowRight","Home","End"].includes(e.key)) return;
+  e.preventDefault(); const tab = e.key === "Home" ? "thread" : e.key === "End" ? "side" : $("#wbody").dataset.tab === "thread" ? "side" : "thread";
+  setTab(tab); $(`.wtabs [data-tab="${tab}"]`).focus();
+});
 $(".wtabs").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) setTab(b.dataset.tab); });
 
 // real open times for a booked session service (anon RPC the public booking widget already uses)
@@ -630,6 +646,7 @@ function paintPending() {
 }
 $("#sendBtn").addEventListener("click", () => {
   if (!state.item || state.draftLoading || (state.pending && state.pending.id === state.item.project.id)) return;
+  if (!state.item.project.client_email) { $("#draftErr").textContent = "Add an email address in CRM before sending email. You can still call or text this lead."; return; }
   const body = $("#draft").value.trim();
   if (replyIsEmpty(body)) { $("#draftErr").textContent = "Add your answer first. Right now it's only a greeting and your sign-off."; $("#draft").focus(); return; }
   if (state.pending) firePending(state.pending); // another reply was still counting down: let it go now
@@ -659,7 +676,7 @@ async function doSend(pend) {
   try {
     await rpc("bk_inbox_send", { p_project: pend.id, p_body: pend.body, p_key: pend.key });
     clearDraft(pend.id);
-    toast(`Sent to ${pend.email}`);
+    toast(`Reply queued for ${pend.email}`);
     await loadList();
     if (state.sel === pend.id) {
       // a phone goes back to the list for the next one (as before); a computer shows the reply in the thread, box cleared

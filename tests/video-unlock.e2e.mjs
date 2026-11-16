@@ -1,14 +1,15 @@
+import { fileURLToPath } from "node:url";
 // Stubbed UI test for a video held until its balance is paid (portal.html). Serves the repo locally;
 // every Supabase call is intercepted, so it never touches prod.
 // Run: node tests/video-unlock.e2e.mjs
 //   PORTAL_SHOTS=<dir>        save screenshots (held + unlocked, desktop + phone) using installed Chrome
 //   PORTAL_VIDEO_PREVIEW=<f>  serve a real preview mp4 (and PORTAL_VIDEO_CLEAN=<f> the original) for those shots
 //   PORTAL_VIDEO_STILL=<f>    serve a real still (jpg) for the closed-preview shots
-import { chromium, webkit } from "/Users/nelsontaylor/.cache/pglite-rig/node_modules/playwright/index.mjs";
+import { chromium, webkit } from "playwright";
 import { spawn } from "node:child_process";
 import { readFileSync, mkdirSync } from "node:fs";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const PORT = 18743;
 const BASE = `http://127.0.0.1:${PORT}`;
 const srv = spawn("python3", ["-m", "http.server", String(PORT), "--bind", "127.0.0.1"], { cwd: root, stdio: "ignore" });
@@ -91,6 +92,8 @@ async function wire(page, errors) {
     if (fn === "bk_extra_edit_cents") return route.fulfill({ json: 3500 });
     const s = body.p_token === "tok" ? get(body.p_project) : null;
     if (!s) return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ message: "not_found" }) });
+    if (fn === "bk_crm_portal_quotes") return route.fulfill({json:{rows:[]}});
+    if (fn === "bk_crm_portal_billing") return route.fulfill({json:{billing_provider:"stripe",external_billing_url:null,paid_amounts:[]}});
     if (fn === "bk_portal") return route.fulfill({ json: { project: s.p, invoices: s.inv, contracts: [], files: [], messages: s.msgs } });
     return route.fulfill({ status: 404, json: {} });
   });
@@ -168,7 +171,7 @@ async function closedChecks(page, label, inv = "inv-closed") {
 }
 
 try {
-  browser = await chromium.launch();
+  browser = await chromium.launch(process.env.PW_CHROME ? { executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" } : {});
   const ctx = await browser.newContext({ viewport: { width: 1536, height: 1024 } });
   const errors = [];
   const page = await ctx.newPage();

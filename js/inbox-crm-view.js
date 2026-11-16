@@ -49,8 +49,8 @@ export function stageChip(status) {
 export function invoiceTotals(invoices) {
   const live = (invoices || []).filter((i) => i.status === "sent" || i.status === "paid");
   const invoiced = live.reduce((n, i) => n + (i.amount_cents || 0), 0);
-  const paid = live.filter((i) => i.status === "paid").reduce((n, i) => n + (i.amount_cents || 0), 0);
-  return { invoiced, paid, due: invoiced - paid, count: live.length };
+  const paid = live.filter((i) => i.status === "paid").reduce((n, i) => n + (i.paid_amount_cents ?? i.amount_cents ?? 0), 0);
+  return { invoiced, paid, due: live.filter(i => i.status === "sent").reduce((n,i) => n + (i.amount_cents || 0), 0), count: live.length };
 }
 
 // the calendar day in Dallas, as "2026-10-26" (one formatter, reused: the list draws this per row)
@@ -75,7 +75,7 @@ export function stats(projects, needsCount, now = new Date()) {
     newLeads: ps.filter((p) => Date.parse(p.created_at) >= weekAgo && !["archived", "lost"].includes(p.status)).length,
     unpaid: inv.filter((i) => i.status === "sent").reduce((n, i) => n + (i.amount_cents || 0), 0),
     collected: inv.filter((i) => i.status === "paid" && i.paid_at && ctDay(new Date(i.paid_at)).slice(0, 7) === month)
-      .reduce((n, i) => n + (i.amount_cents || 0), 0),
+      .reduce((n, i) => n + (i.paid_amount_cents ?? i.amount_cents ?? 0), 0),
     monthName: new Intl.DateTimeFormat("en-US", { timeZone: TZ, month: "long" }).format(now),
   };
 }
@@ -135,7 +135,7 @@ export function timeline(item, extra) {
   (invoices || []).forEach((i) => {
     if (i.status === "draft" || i.status === "void") return;
     ev.push({ kind: "event", at: i.created_at, label: `Invoice sent · ${i.title} · ${money(i.amount_cents)}`, tone: "money" });
-    if (i.status === "paid" && i.paid_at) ev.push({ kind: "event", at: i.paid_at, label: `Paid · ${money(i.amount_cents)}`, tone: "good" });
+    if (i.status === "paid" && i.paid_at) ev.push({ kind: "event", at: i.paid_at, label: `Paid · ${money(i.paid_amount_cents ?? i.amount_cents)}`, tone: "good" });
   });
   return ev.filter((e) => e.at).sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || (a.kind === "brief" ? -1 : b.kind === "brief" ? 1 : 0));
 }

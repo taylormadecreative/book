@@ -1,9 +1,10 @@
+import { fileURLToPath } from "node:url";
 // Stubbed UI test for the previous Inbox look (/inbox/v1.html, the ?look=v1 fallback). Serves the repo locally; every Supabase call is intercepted — never touches prod.
 // Run: node tests/inbox.e2e.mjs
-import { chromium } from "/Users/nelsontaylor/.cache/pglite-rig/node_modules/playwright/index.mjs";
+import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const srv = spawn("python3", ["-m", "http.server", "18731"], { cwd: root, stdio: "ignore" });
 await new Promise((r) => setTimeout(r, 900));
 let browser;
@@ -18,7 +19,7 @@ const ITEM = { project: { id: ROW.id, client_name: EVIL, client_email: "j@x.com"
   bookings: [], messages: [], alerts: [{ type: "inquiry", created_at: ROW.last_at }], past_projects: [] };
 let sends = 0, listCalls = 0, failFirstList = true, jwtOnce = true;
 
-browser = await chromium.launch();
+browser = await chromium.launch(process.env.PW_CHROME ? { executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" } : {});
 const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 } });
 await ctx.addInitScript(() => {
   const s = { access_token: "t", refresh_token: "r", expires_at: Math.floor(Date.now() / 1000) + 3600, expires_in: 3600, token_type: "bearer",

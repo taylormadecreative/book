@@ -368,7 +368,7 @@ $("#bookForm").addEventListener("submit", async (e) => {
   btn.disabled = true;
   btn.textContent = "Sending…";
   try {
-    const r = await BK.rpc("bk_submit_inquiry", {
+    const payload = {
       p_name: name,
       p_email: email,
       p_service: state.service,
@@ -378,14 +378,17 @@ $("#bookForm").addEventListener("submit", async (e) => {
       p_location: $("#fLocation").value.trim() || null,
       p_budget: $("#fBudget").value || null,
       p_details: $("#fDetails").value.trim() || null,
-      p_source: $("#fSource").value || null,
-    });
+      p_source: $("#fSource").value || "Website",
+    };
+    const { submissionFor, completeSubmission } = await import("./intake-request.js?v=1");
+    const r = await BK.rpc("bk_submit_inquiry_once", {p_submission_id: await submissionFor("inquiry", payload), ...payload});
     const url = `${location.origin}${location.pathname.replace(/index\.html$/, "").replace(/\/$/, "")}/portal.html?p=${r.id}&t=${r.token}`;
     $("#portalLink").textContent = url;
     $("#portalLink").href = url;
     $("#portalBtn").href = url;
     $("#bookForm").hidden = true;
     $("#bookDone").hidden = false;
+    completeSubmission("inquiry");
   } catch (ex) {
     err.textContent = "Something glitched on send. Try again, or just DM me @taylormade_creative.";
     btn.disabled = false;
@@ -409,13 +412,16 @@ $("#digitalsForm").addEventListener("submit", async (e) => {
   btn.disabled = true;
   btn.textContent = "Booking…";
   try {
-    const r = await BK.rpc("bk_book_digitals", {
+    const payload = {
       p_name: name,
       p_email: email,
       p_phone: $("#dgPhone").value.trim() || null,
       p_event_date: $("#dgDate").value || null,
-    });
+    };
+    const { submissionFor, completeSubmission } = await import("./intake-request.js?v=1");
+    const r = await BK.rpc("bk_book_digitals_once", {p_submission_id: await submissionFor("digitals", payload), ...payload});
     const url = `${location.origin}${location.pathname.replace(/index\.html$/, "").replace(/\/$/, "")}/portal.html?p=${r.id}&t=${r.token}`;
+    completeSubmission("digitals");
     location.href = url; // straight to the portal, where the $100 invoice is waiting
   } catch (ex) {
     err.textContent = "Booking glitched. Try again, or DM me @taylormade_creative.";

@@ -1,10 +1,11 @@
+import { fileURLToPath } from "node:url";
 // Stubbed UI test for the admin Close preview / Reopen preview button on a held video. Serves the repo
 // locally; every Supabase call is intercepted, so it never touches prod.
 // Run: node tests/admin-video-preview.e2e.mjs
-import { chromium } from "/Users/nelsontaylor/.cache/pglite-rig/node_modules/playwright/index.mjs";
+import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const PORT = 18744;
 const srv = spawn("python3", ["-m", "http.server", String(PORT), "--bind", "127.0.0.1"], { cwd: root, stdio: "ignore" });
 await new Promise((r) => setTimeout(r, 900));
@@ -24,7 +25,7 @@ const patches = [];
 let refuse = false; // the database quietly refuses the write (no row back)
 
 try {
-  browser = await chromium.launch();
+  browser = await chromium.launch(process.env.PW_CHROME ? { executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" } : {});
   const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1440, height: 900 } });
   await ctx.addInitScript(() => {
     const s = { access_token: "t", refresh_token: "r", expires_at: Math.floor(Date.now() / 1000) + 3600, expires_in: 3600, token_type: "bearer",
