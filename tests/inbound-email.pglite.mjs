@@ -1,0 +1,60 @@
+import {PGlite} from '@electric-sql/pglite';
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const db=new PGlite();const read=p=>readFileSync(new URL(p,import.meta.url),'utf8');
+const q=async(s,p=[])=>(await db.query(s,p)).rows;
+const one=async(s,p=[])=>(await q(s,p))[0];
+const rpc=async(name,args=[])=>(await one(`select ${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) r`,args)).r;
+let checks=0;const check=(v,label)=>{assert.ok(v,label);checks++;};
+try{
+  await db.exec(read('./fixtures/crm-schema.sql'));
+  await db.exec(read('../supabase/migrations/20261116192939_crm_foundation.sql'));
+  await db.exec(read('../supabase/migrations/20261116193952_crm_inbound_email.sql'));
+  const STAFF='11111111-1111-4111-8111-111111111111';
+  await q(`insert into profiles values($1,'employee','Synthetic Staff')`,[STAFF]);
+  async function as(role,uid,fn){await db.exec(`set role ${role}`);await q(`select set_config('request.jwt.claim.sub',$1,false)`,[uid||'']);try{return await fn();}finally{await db.exec('reset role');}}
+  const staff=fn=>as('authenticated',STAFF,fn),service=fn=>as('service_role',null,fn);
+  const p=await staff(()=>rpc('bk_crm_create_project',[{client_name:'Synthetic Email Client',client_email:'client@example.test',referral_source:'Website'}]));
+  const address=await service(()=>rpc('bk_crm_email_reply_route',[p.id,'replies.example.test']));
+  check(address===await service(()=>rpc('bk_crm_email_reply_route',[p.id,'replies.example.test'])),'reply address is stable per project/domain');
+  const route=address.slice(6).split('@')[0];
+  check(route!==p.access_token && /^reply\+[a-f0-9-]+@replies\.example\.test$/.test(address),'route capability is independent of portal token');
+  for(const [role,uid]of [['anon',null],['authenticated',STAFF]]){
+    await assert.rejects(as(role,uid,()=>rpc('bk_crm_email_reply_route',[p.id,'replies.example.test'])));checks++;
+    await assert.rejects(as(role,uid,()=>q(`select * from bk_email_routes`)));checks++;
+    await assert.rejects(as(role,uid,()=>rpc('bk_crm_ingest_email',['msg_forge','22222222-2222-4222-8222-222222222222',route,'replies.example.test','client@example.test','Forged'])));checks++;
+  }
+  const receive=(event='msg_1',email='22222222-2222-4222-8222-222222222222',from='client@example.test',domain='replies.example.test',token=route,message='<message1@example.test>')=>service(()=>rpc('bk_crm_ingest_email',[event,email,token,domain,from,'Actual verified reply',message]));
+  await staff(()=>q(`update bk_projects set inbox_handled_at=now() where id=$1`,[p.id]));
+  check((await receive()).status==='received','verified service boundary imports legitimate client reply');
+  check((await receive()).status==='duplicate','same delivery is idempotent');
+  check((await receive('msg_2')).status==='duplicate','new webhook delivery ID for same provider email stays idempotent');
+  check((await receive('msg_3','33333333-3333-4333-8333-333333333333')).status==='duplicate','RFC message redelivery stays idempotent for project');
+  check((await one(`select count(*)::int n from bk_messages`)).n===1,'one client thread message survives retries');
+  check((await one(`select inbox_handled_at from bk_projects where id=$1`,[p.id])).inbox_handled_at===null,'reply reopens inbox attention');
+  check((await one(`select status from bk_tasks where project_id=$1 and automation_key='client_reply'`,[p.id])).status==='open','reply adds followup task');
+  await staff(()=>q(`update bk_tasks set status='done' where project_id=$1 and automation_key='client_reply'`,[p.id]));
+  await staff(()=>q(`update bk_projects set inbox_handled_at=now() where id=$1`,[p.id]));
+  await q(`insert into bk_messages(project_id,sender,body) values($1,'client','A later portal reply')`,[p.id]);
+  check((await one(`select status from bk_tasks where project_id=$1 and automation_key='client_reply'`,[p.id])).status==='open','portal reply also reactivates completed followup');
+  check((await one(`select count(*)::int n from bk_tasks where project_id=$1 and automation_key='client_reply'`,[p.id])).n===1,'reply task reactivation does not duplicate tasks');
+  const before=(await one(`select count(*)::int n from bk_messages`)).n;
+  check((await receive('msg_wrong','44444444-4444-4444-8444-444444444444','attacker@example.test')).status==='ignored','wrong sender refused');
+  check((await receive('msg_domain','55555555-5555-4555-8555-555555555555','client@example.test','wrong.example.test')).status==='ignored','wrong domain refused');
+  check((await receive('msg_token','66666666-6666-4666-8666-666666666666','client@example.test','replies.example.test',p.access_token)).status==='ignored','portal token cannot act as route token');
+  check((await one(`select count(*)::int n from bk_messages`)).n===before,'unmatched mail writes no CRM messages');
+  check((await one(`select count(*)::int n from bk_email_queue`)).n===0,'inbound path never queues outbound mail');
+  const reviewId='88888888-8888-4888-8888-888888888888';
+  await service(()=>rpc('bk_crm_note_email',['msg_review',reviewId,route,'replies.example.test','sender_authentication_failed',true]));
+  await service(()=>rpc('bk_crm_note_email',['msg_review_retry',reviewId,route,'replies.example.test','sender_authentication_failed',true]));
+  let reviews=await staff(()=>rpc('bk_crm_email_review'));
+  check(reviews.total===1&&reviews.rows[0].email_id===reviewId,'held reply appears once in staff review queue');
+  check(!JSON.stringify(reviews).includes(route)&&!JSON.stringify(reviews).includes(p.access_token),'review queue exposes neither route capability nor portal token');
+  check((await one(`select count(*)::int n from bk_tasks where automation_key=$1`,['email_review_'+reviewId])).n===1,'held replies generate one actionable review task');
+  await staff(()=>q(`update bk_tasks set status='done' where automation_key=$1`,['email_review_'+reviewId]));
+  check((await staff(()=>rpc('bk_crm_email_review'))).total===0,'completing held-email task marks review resolved');
+  await service(()=>rpc('bk_crm_note_email',['msg_auto','99999999-9999-4999-8999-999999999999',route,'replies.example.test','automatic_message',false]));
+  check((await staff(()=>rpc('bk_crm_email_review'))).total===0,'automatic replies are recorded as suppressed without review noise');
+  await assert.rejects(service(()=>rpc('bk_crm_ingest_email',['msg_long','77777777-7777-4777-8777-777777777777',route,'replies.example.test','client@example.test','x'.repeat(4001)])));checks++;
+  console.log(`inbound-email.pglite: ${checks} checks passed (synthetic emails, no network)`);
+}finally{await db.close();}

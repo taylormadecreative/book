@@ -1272,3 +1272,15 @@ ol, ul { padding: 0; list-style: none; }
   .g-selbar.live.sb-bar, .g-selbar.live.sb-bar:not(.armed) { transform: none; }
   .sb-lb-step:active { transform: none; }
 }
+
+/* Versioned CRM quote documents, in the existing portal's reading style. */
+.quote-lines { margin: 1rem 0; }
+.quote-lines > div { display: flex; gap: 1rem; justify-content: space-between; padding: .7rem 0; border-bottom: 1px solid var(--paper-line, #e5e0d6); }
+.quote-lines dt { overflow-wrap: anywhere; }
+.quote-lines dd { margin: 0; white-space: nowrap; }
+.quote-total { display:flex; justify-content:space-between; font-size:1.2rem; }
+.quote-notes { white-space:pre-wrap; overflow-wrap:anywhere; }
+.quote-decline { margin-top:1rem; }
+.quote-decline summary { cursor:pointer; padding:.7rem 0; }
+.quote-decline form { display:grid; gap:12px; }
+.quote-decline textarea { display:block; width:100%; min-height:80px; padding:12px; font:inherit; }

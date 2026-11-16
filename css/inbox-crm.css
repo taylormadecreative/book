@@ -38,6 +38,8 @@
 }
 
 html { scroll-behavior: auto; } /* landing on the newest message must be instant, not a glide */
+.inbox-pages { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 18px 12px; color: var(--muted); font: 13px var(--font-ui); }
+.inbox-pages button:disabled { opacity: .45; cursor: default; }
 body { background: var(--ink); font-size: 15px; }
 body::after { display: none; } /* the film grain belongs to the marketing page */
 .sr-only { position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -198,7 +200,7 @@ button.crm-stat:active { transform: scale(0.97); }
 .lempty p { margin: 0 0 0.3rem; }
 .lempty .lempty-big { font-family: var(--font-display); font-size: 1.7rem; text-transform: uppercase; color: var(--text); }
 .lempty .btn { margin-top: 0.9rem; }
-.lpane-foot { display: flex; align-items: center; gap: 1.3rem; padding: 0.75rem 1.25rem; border-top: 1px solid var(--ink-line); }
+.lpane-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 0.65rem 1.3rem; padding: 0.75rem 1.25rem; border-top: 1px solid var(--ink-line); }
 .lpane-foot a, .lpane-foot .linkish { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.35rem 0; background: none; border: 0; text-decoration: none; font: 500 0.86rem var(--font-ui); color: var(--muted); transition: color 0.15s var(--ease); }
 .lpane-foot svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .lpane-foot .linkish { margin-left: auto; }

@@ -1,10 +1,11 @@
+import { fileURLToPath } from "node:url";
 // Stubbed UI test for the Studio content calendar (content.html). Serves the repo locally; every Supabase
 // call is intercepted, so it never touches prod. The posts below are made up: real scripts never go in this public repo.
 // Run: node tests/content.e2e.mjs   (SHOTS=<dir> saves stills)
-import { chromium } from "/Users/nelsontaylor/.cache/pglite-rig/node_modules/playwright/index.mjs";
+import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const PORT = 18753, BASE = `http://localhost:${PORT}`;
 const srv = spawn("python3", ["-m", "http.server", String(PORT)], { cwd: root, stdio: "ignore" });
 await new Promise((r) => setTimeout(r, 900));
@@ -29,7 +30,7 @@ const POSTS = () => [
   P("p4", "2026-11-02", { status: "posted", captions: { instagram: "Only Instagram here." } }),
 ];
 
-browser = await chromium.launch();
+browser = await chromium.launch(process.env.PW_CHROME ? { executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" } : {});
 async function open({ width = 1440, height = 900, posts = POSTS(), admin = true, loadFails = false, signedIn = true, path = "/content.html", refuse = false } = {}) {
   const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width, height }, hasTouch: width < 760, isMobile: width < 760 });
   await ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });

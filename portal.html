@@ -17,7 +17,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
   <!-- the wordmark is the only Unbounded on the page: load just its letters -->
   <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@800&text=TAYLORMADE%2FCREATIVE&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/client.css?v=9">
+  <link rel="stylesheet" href="css/client.css?v=12">
 </head>
 <body>
 
@@ -137,6 +137,10 @@
             <section class="panel" role="tabpanel" id="panel-details" aria-labelledby="tab-details" tabindex="-1" hidden>
               <h2 class="sec-h">Project details</h2>
               <dl class="facts" id="pDetails"></dl>
+              <section id="quotesBlock" class="contracts" hidden aria-labelledby="quoteHeading">
+                <h3 id="quoteHeading" class="sub-h">Your quote</h3>
+                <div id="pQuotes"></div>
+              </section>
               <div class="contracts" id="contractsBlock" hidden>
                 <h3 class="sub-h">Contract</h3>
                 <div id="pContracts"></div>
@@ -189,6 +193,6 @@
 
   <script src="js/config.js"></script>
   <script src="js/gallery-core.js?v=13"></script>
-  <script src="js/client-portal.js?v=10"></script>
+  <script src="js/client-portal.js?v=11"></script>
 </body>
 </html>

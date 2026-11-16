@@ -1,9 +1,10 @@
+import { fileURLToPath } from "node:url";
 // Stubbed UI test for the admin proofing picks view. Serves the repo locally; every Supabase call is intercepted — never touches prod.
 // Run: node tests/admin-picks.e2e.mjs
-import { chromium } from "/Users/nelsontaylor/.cache/pglite-rig/node_modules/playwright/index.mjs";
+import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const srv = spawn("python3", ["-m", "http.server", "18741"], { cwd: root, stdio: "ignore" });
 await new Promise((r) => setTimeout(r, 900));
 let browser;
@@ -39,7 +40,7 @@ const PROJECTS = [
 const SVG = (label) => `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="720"><rect width="480" height="720" fill="#3a5f8a"/><text x="20" y="60" font-size="28" fill="#fff">${label}</text></svg>`;
 const imgHits = new Set();
 
-browser = await chromium.launch();
+browser = await chromium.launch(process.env.PW_CHROME ? { executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" } : {});
 const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1440, height: 900 } });
 await ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://localhost:18741" });
 await ctx.addInitScript(() => {

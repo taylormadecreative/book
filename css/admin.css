@@ -738,7 +738,7 @@ body::after { display: none; }
 @media (max-width: 560px) {
   .wordmark { font-size: 1.35rem; }
   /* phones: brand row, then Growth / Schedule on the left and the account on the right */
-  .abar-nav { width: 100%; margin-left: 0; gap: 1.2rem; }
+  .abar-nav { width: 100%; margin-left: 0; gap: 0.65rem 1.1rem; flex-wrap: wrap; }
   .abar-nav .avatar { margin-left: auto; }
   .abar-nav a { font-size: 0.88rem; }
   .stat { padding: 0.65rem 0.75rem 0.7rem; }

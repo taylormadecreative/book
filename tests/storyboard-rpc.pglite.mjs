@@ -1,10 +1,11 @@
+import { fileURLToPath } from "node:url";
 // Real-Postgres test (PGlite, no Docker) for the storyboard migration: the note and review functions,
 // their locking and message rules, and that only the service role can call them.
 // Run: node tests/storyboard-rpc.pglite.mjs
-import { PGlite } from "/Users/nelsontaylor/.cache/pglite-rig/node_modules/@electric-sql/pglite/dist/index.js";
+import { PGlite } from "@electric-sql/pglite";
 import { readFileSync } from "node:fs";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 let failures = 0, checks = 0;
 const ok = (cond, msg) => { checks++; if (!cond) { failures++; console.error("FAIL:", msg); } };
 const db = new PGlite();

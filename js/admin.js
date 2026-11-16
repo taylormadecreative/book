@@ -38,6 +38,15 @@ function toast(msg) {
   t._h = setTimeout(() => t.classList.remove("show"), 2400);
 }
 
+// A refused RLS write may return zero rows without an error. Verify the result.
+async function saved(query) {
+  try {
+    const {data,error}=await query.select("id");
+    if(error || !Array.isArray(data) || !data.length) { toast("Couldn't save. Your changes are still here. Try again."); return false; }
+    return true;
+  } catch (_) { toast("Couldn't save. Check your connection and try again."); return false; }
+}
+
 /* ---------------- auth ---------------- */
 init();
 async function init() {
@@ -172,7 +181,7 @@ function renderStats() {
   const ps = state.projects;
   const newCount = ps.filter((p) => p.status === "new").length;
   const unread = ps.reduce((n, p) => n + unreadCount(p), 0);
-  const collected = ps.flatMap((p) => p.bk_invoices).filter((i) => i.status === "paid").reduce((n, i) => n + i.amount_cents, 0);
+  const collected = ps.flatMap((p) => p.bk_invoices).filter((i) => i.status === "paid").reduce((n, i) => n + (i.paid_amount_cents ?? i.amount_cents), 0);
   const booked = ps.filter((p) => ["booked", "in_production"].includes(p.status)).length;
   const stat = (n, one, many, show = n) => `<div class="stat ${n ? "" : "zero"}"><b>${show}</b><span>${n === 1 ? one : many}</span></div>`;
   $("#stats").innerHTML =
@@ -283,7 +292,7 @@ function renderDetail(p, keepScroll = false) {
   const msgs = p.bk_messages.sort((a, b) => a.created_at.localeCompare(b.created_at));
   const files = p.bk_files.sort((a, b) => a.created_at.localeCompare(b.created_at));
 
-  const paid = inv.filter((i) => i.status === "paid").reduce((n, i) => n + i.amount_cents, 0);
+  const paid = inv.filter((i) => i.status === "paid").reduce((n, i) => n + (i.paid_amount_cents ?? i.amount_cents), 0);
   const heading = `${p.client_name}${p.company ? ` — ${p.company}` : ""}`;
   const who = firstName(p.client_name);
   // a divider each time the conversation moves to a new day
@@ -306,6 +315,7 @@ function renderDetail(p, keepScroll = false) {
         <div class="sub">${esc(SERVICES[p.service] || p.service)}${p.event_date ? `<span>·</span>${fmtLong(p.event_date)}` : ""}</div>
       </div>
       <div class="dactions">
+      <a class="btn btn-ghost" href="/crm/?p=${esc(p.id)}">Project tasks &amp; follow-up</a>
         <button class="btn btn-ghost back-list" id="backList">← Pipeline</button>
         <select id="statusSel" aria-label="Project status">${STATUSES.map((s) => `<option value="${s}" ${p.status === s ? "selected" : ""}>${SLABEL[s]}</option>`).join("")}</select>
         <button class="btn btn-ghost" id="copyPortal">${ICON_LINK}Copy portal link</button>
@@ -329,11 +339,12 @@ function renderDetail(p, keepScroll = false) {
 
         <section data-k="invoices" class="acard">
           ${head("02", "Invoices", `<span class="aside">${money(paid)} paid</span>`)}
+          <p class="acard-empty">Billing: ${p.billing_provider === "stripe" ? "Stripe" : p.billing_provider === "honeybook" ? "HoneyBook, all payments remain there" : "Choose a payment provider before invoicing"}. <a href="/crm/?p=${esc(p.id)}">Manage billing in CRM</a></p>
           ${inv.length ? inv.map((i) => `
             <div class="ainv">
               <div><div class="t">${esc(i.title)}<span class="pill ${i.status === "paid" ? "green" : i.status === "sent" ? "gold" : i.status === "void" ? "red" : ""}">${i.status}</span></div>
               <small>${esc(cap(i.kind))}${i.paid_at ? ` · paid ${fmtD(i.paid_at)}` : ""}</small></div>
-              <span class="a">${money(i.amount_cents)}</span>
+              <span class="a">${money(i.status === "paid" ? i.paid_amount_cents ?? i.amount_cents : i.amount_cents)}</span>
               <div class="acts">
                 ${i.status === "draft" ? `<button data-inv-send="${i.id}">Send</button>` : ""}
                 ${i.status === "sent" ? `<button data-inv-paid="${i.id}">Mark paid</button>` : ""}
@@ -658,8 +669,7 @@ async function uploadToGallery(p, galleryId, files) {
 
 function wireDetail(p) {
   $("#statusSel").addEventListener("change", async (e) => {
-    const { error } = await sb.from("bk_projects").update({ status: e.target.value }).eq("id", p.id);
-    if (error) { toast("Update failed"); return; }
+    if (!await saved(sb.from("bk_projects").update({ status: e.target.value }).eq("id", p.id))) { e.target.value=p.status; return; }
     toast(`Status → ${SLABEL[e.target.value]}`);
     await load();
   });
@@ -679,32 +689,34 @@ function wireDetail(p) {
     const title = $("#invTitle").value.trim() || "Invoice";
     const amt = Math.round(parseFloat($("#invAmt").value) * 100);
     if (!amt || amt <= 0) { toast("Enter an amount"); return; }
-    const { error } = await sb.from("bk_invoices").insert({
+    if (!p.billing_provider || p.billing_provider === "unassigned") { toast("Choose Stripe or HoneyBook in CRM before invoicing this project."); return; }
+    if (!p.client_email) { toast("Add the client's email in CRM before sending an invoice."); return; }
+    if (!await saved(sb.from("bk_invoices").insert({
       project_id: p.id, title, amount_cents: amt, kind: $("#invKind").value, status: "sent",
+      source: p.billing_provider === "honeybook" ? "honeybook" : null,
       line_items: [{ label: title, amount_cents: amt }],
-    });
-    if (error) { toast("Invoice failed"); return; }
+    }))) return;
     $("#invTitle").value = ""; $("#invAmt").value = "";
-    toast("Invoice sent. It's in the client portal.");
+    toast("Invoice saved in the portal and queued for email.");
     await load();
   });
 
   $("#dpane").querySelectorAll("[data-inv-send]").forEach((b) => b.addEventListener("click", async () => {
-    await sb.from("bk_invoices").update({ status: "sent" }).eq("id", b.dataset.invSend);
-    toast("Invoice sent"); await load();
+    if (!await saved(sb.from("bk_invoices").update({ status: "sent" }).eq("id", b.dataset.invSend))) return;
+    toast("Invoice published and queued for email"); await load();
   }));
   $("#dpane").querySelectorAll("[data-inv-paid]").forEach((b) => b.addEventListener("click", async () => {
-    await sb.from("bk_invoices").update({ status: "paid", paid_at: new Date().toISOString(), payment_note: "Marked paid manually" }).eq("id", b.dataset.invPaid);
+    if (!await saved(sb.from("bk_invoices").update({ status: "paid", paid_at: new Date().toISOString(), payment_note: "Marked paid manually" }).eq("id", b.dataset.invPaid))) return;
     toast("Marked paid"); await load();
   }));
   $("#dpane").querySelectorAll("[data-inv-void]").forEach((b) => b.addEventListener("click", async () => {
     if (!confirm("Void this invoice? The client won't be able to pay it.")) return;
-    await sb.from("bk_invoices").update({ status: "void" }).eq("id", b.dataset.invVoid);
+    if (!await saved(sb.from("bk_invoices").update({ status: "void" }).eq("id", b.dataset.invVoid))) return;
     toast("Invoice voided"); await load();
   }));
 
   $("#noteSave").addEventListener("click", async () => {
-    await sb.from("bk_projects").update({ notes_internal: $("#noteBox").value }).eq("id", p.id);
+    if (!await saved(sb.from("bk_projects").update({ notes_internal: $("#noteBox").value }).eq("id", p.id))) return;
     toast("Notes saved");
   });
 
@@ -713,6 +725,7 @@ function wireDetail(p) {
     const input = $("#achatInput");
     const body = input.value.trim();
     if (!body) return;
+    if (!p.client_email) { toast("Add the client's email in CRM before replying here. You can call or text them from Inbox."); return; }
     input.value = "";
     const { error } = await sb.from("bk_messages").insert({ project_id: p.id, sender: "studio", body });
     if (error) { input.value = body; toast("Send failed"); return; }
@@ -728,12 +741,12 @@ function wireDetail(p) {
   $("#fileAdd").addEventListener("click", async () => {
     const label = $("#fileLabel").value.trim(), url = $("#fileUrl").value.trim();
     if (!label || !/^https?:\/\//.test(url)) { toast("Need a label and a full https:// link"); return; }
-    await sb.from("bk_files").insert({ project_id: p.id, label, url });
+    if (!await saved(sb.from("bk_files").insert({ project_id: p.id, label, url }))) return;
     $("#fileLabel").value = ""; $("#fileUrl").value = "";
     toast("Link added. It's live in the portal."); await load();
   });
   $("#dpane").querySelectorAll("[data-file-del]").forEach((b) => b.addEventListener("click", async () => {
-    await sb.from("bk_files").delete().eq("id", b.dataset.fileDel);
+    if (!await saved(sb.from("bk_files").delete().eq("id", b.dataset.fileDel))) return;
     await load();
   }));
 

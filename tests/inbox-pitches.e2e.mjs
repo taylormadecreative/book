@@ -1,10 +1,11 @@
+import { fileURLToPath } from "node:url";
 // Stubbed UI test for the Pitches tab in /inbox/. Every Supabase call is intercepted — never touches prod.
 // Run: node tests/inbox-pitches.e2e.mjs
-import { chromium } from "/Users/nelsontaylor/.cache/pglite-rig/node_modules/playwright/index.mjs";
+import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const PORT = 18732, BASE = `http://localhost:${PORT}`;
 const srv = spawn("python3", ["-m", "http.server", String(PORT)], { cwd: root, stdio: "ignore" });
 await new Promise((r) => setTimeout(r, 900));
@@ -40,7 +41,7 @@ DMP.content_hash = hash(DMP);
 const DM = { pitch: DMP, prospect: { org: "Fitting Room Vintage", lane: "small_business", instagram: "fittingroomvintage" }, events: [], settings: { shadow: false, paused: false } };
 const calls = [];
 
-browser = await chromium.launch();
+browser = await chromium.launch(process.env.PW_CHROME ? { executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" } : {});
 const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 } });
 await ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
 await ctx.addInitScript(() => {

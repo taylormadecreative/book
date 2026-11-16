@@ -3,7 +3,7 @@
 **register: brand** (index.html; portal.html and admin.html lean product)
 
 ## What it is
-Direct-booking site and HoneyBook replacement for Nelson Taylor's photography and video work. Three surfaces: a cinematic marketing + booking page (the product IS the design), a tokenized client portal (status, invoices, Stripe payments, messages, delivery), and a studio dashboard for Nelson (pipeline, invoices, messages, files).
+Studio CRM and direct-booking site for Nelson Taylor's photography and video work. The daily CRM connects leads, customers, next actions, quotes, billing ownership, production and follow-up. The cinematic booking page captures inquiries; the tokenized client portal handles approvals, messages and delivery; Studio manages contracts, invoices and galleries. Stripe serves its assigned projects, while every payment on a HoneyBook project remains in HoneyBook.
 
 ## Who it's for
 Artists, labels, and brand operators in DFW and beyond who want cinema-grade visuals and are ready to book: music videos, brand content and commercials, photography, event coverage. They arrive from Instagram or a referral, on a phone, comparing Nelson to cheaper shooters. The page wins on proof (real films, real campaign stills), speed to book, and the feeling that this operation is a level above.

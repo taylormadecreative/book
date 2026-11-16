@@ -1,10 +1,11 @@
+import { fileURLToPath } from "node:url";
 // Stubbed UI test for storyboards in admin: a draft the client can't see, Send to client, the deposit
 // link approving leads to, client notes, Reopen only on the latest round. Every Supabase call is intercepted.
 // Run: node tests/admin-storyboard.e2e.mjs
-import { chromium } from "/Users/nelsontaylor/.cache/pglite-rig/node_modules/playwright/index.mjs";
+import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const srv = spawn("python3", ["-m", "http.server", "18742"], { cwd: root, stdio: "ignore" });
 await new Promise((r) => setTimeout(r, 900));
 let browser, failures = 0, checks = 0;
@@ -33,7 +34,7 @@ const PROJECTS = () => [{ id: PID, title: "Delilah Amaro — Hide & Haunt Commer
   notes_internal: "", access_token: "tok", created_at: now, updated_at: now, bk_invoices: [], bk_messages: [], bk_files: [], bk_galleries: GALS }];
 const patches = [], inserts = [];
 
-browser = await chromium.launch();
+browser = await chromium.launch(process.env.PW_CHROME ? { executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" } : {});
 const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1440, height: 900 } });
 await ctx.addInitScript(() => {
   const s = { access_token: "t", refresh_token: "r", expires_at: Math.floor(Date.now() / 1000) + 3600, expires_in: 3600, token_type: "bearer",

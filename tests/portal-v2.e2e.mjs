@@ -1,13 +1,14 @@
+import { fileURLToPath } from "node:url";
 // Stubbed UI test for the client portal (portal.html, 2026-10-21 look). Serves the repo locally;
 // every Supabase call is intercepted, so it never touches prod.
 // Run: node tests/portal-v2.e2e.mjs
 //   PORTAL_IMAGES=<dir>  serve real photos (final-<n>.jpg / proof-<n>.jpg) instead of SVG stand-ins
 //   PORTAL_SHOTS=<dir>   save screenshots of every stage at desktop + phone widths
-import { chromium, webkit } from "/Users/nelsontaylor/.cache/pglite-rig/node_modules/playwright/index.mjs";
+import { chromium, webkit } from "playwright";
 import { spawn } from "node:child_process";
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const PORT = 18742;
 const BASE = `http://127.0.0.1:${PORT}`;
 const srv = spawn("python3", ["-m", "http.server", String(PORT), "--bind", "127.0.0.1"], { cwd: root, stdio: "ignore" });
@@ -108,6 +109,8 @@ async function wire(page, errors) {
     if (fn === "bk_extra_edit_cents") return route.fulfill({ json: 3500 });
     const s = body.p_token === "tok" ? get(body.p_project) : null;
     if (!s) return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ message: "not_found" }) });
+    if (fn === "bk_crm_portal_quotes") return route.fulfill({json:{rows:[]}});
+    if (fn === "bk_crm_portal_billing") return route.fulfill({json:{billing_provider:"stripe",external_billing_url:null,paid_amounts:[]}});
     if (fn === "bk_portal") return route.fulfill({ json: { project: s.p, invoices: s.inv, contracts: s.contracts, files: s.files, messages: s.msgs } });
     if (fn === "bk_portal_send") { s.msgs.push({ id: `m${s.msgs.length + 1}`, sender: "client", created_at: new Date().toISOString(), body: body.p_body }); return route.fulfill({ json: null }); }
     if (fn === "bk_portal_request_extras") {
@@ -159,7 +162,7 @@ const text = async (page, sel) => (await page.locator(sel).first().textContent()
 async function overflow(page) { return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth); }
 
 try {
-  browser = await chromium.launch();
+  browser = await chromium.launch(process.env.PW_CHROME ? { executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" } : {});
   const ctx = await browser.newContext({ viewport: { width: 1536, height: 1024 }, acceptDownloads: true });
   const errors = [];
   const page = await ctx.newPage();

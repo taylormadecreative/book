@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 // Stubbed UI test for storyboard review in the client portal (portal.html). Serves the repo locally;
 // every Supabase call is intercepted, so it never touches prod. The stub mirrors what bk-media and the
 // bk_storyboard_* functions decide (tests/storyboard-rpc.pglite.mjs tests those for real).
@@ -5,12 +6,12 @@
 //   STORYBOARD_IMAGES=<dir>  serve real frames (<dir>/full/frame-1A.jpg, <dir>/thumbs/…) and captions (<dir>/frames.json)
 //   STORYBOARD_SHOTS=<dir>   save screenshots at desktop + phone widths
 //   PW_WEBKIT=<playwright-core index.mjs>  also run the phone pass in WebKit (iPhone Safari's engine)
-import { chromium } from "/Users/nelsontaylor/.cache/pglite-rig/node_modules/playwright/index.mjs";
+import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 
-const root = new URL("..", import.meta.url).pathname;
-const PORT = 18743;
+const root = fileURLToPath(new URL("..", import.meta.url));
+const PORT = 18746;
 const BASE = `http://127.0.0.1:${PORT}`;
 const srv = spawn("python3", ["-m", "http.server", String(PORT), "--bind", "127.0.0.1"], { cwd: root, stdio: "ignore" });
 await new Promise((r) => setTimeout(r, 900));
@@ -23,7 +24,18 @@ const done = async () => { try { await browser?.close(); } catch (_) {} srv.kill
 
 /* ---------------- fixtures: the Hide & Haunt storyboard (27 frames, 8 scenes) ---------------- */
 const FRAMES = IMAGES && existsSync(`${IMAGES}/frames.json`) ? JSON.parse(readFileSync(`${IMAGES}/frames.json`, "utf8"))
-  : Array.from({ length: 27 }, (_, i) => ({ sort: i + 1, file: `frame-${i + 1}.jpg`, meta: { code: `${Math.floor(i / 4) + 1}${"ABCD"[i % 4]}`, tc: `0:${String(i * 2).padStart(2, "0")}–0:${String(i * 2 + 2).padStart(2, "0")}`, scene_no: Math.floor(i / 4) + 1, scene: `Scene name ${Math.floor(i / 4) + 1}`, action: `Action for frame ${i + 1}.`, line: i % 3 ? "" : `JAKE: "Line ${i + 1}"` } }));
+  // Explicit scene lengths keep the synthetic board aligned with the 8-scene,
+  // 27-frame review flow. Grouping every four frames produces only seven scenes.
+  : [4, 4, 5, 3, 3, 3, 3, 2].flatMap((count, sceneIndex, lengths) =>
+      Array.from({ length: count }, (_, frameIndex) => {
+        const i = lengths.slice(0, sceneIndex).reduce((n, length) => n + length, 0) + frameIndex;
+        return { sort: i + 1, file: `frame-${i + 1}.jpg`, meta: {
+          code: `${sceneIndex + 1}${String.fromCharCode(65 + frameIndex)}`,
+          tc: `0:${String(i * 2).padStart(2, "0")}–0:${String(i * 2 + 2).padStart(2, "0")}`,
+          scene_no: sceneIndex + 1, scene: `Scene name ${sceneIndex + 1}`,
+          action: `Action for frame ${i + 1}.`, line: i % 3 ? "" : `JAKE: "Line ${i + 1}"`,
+        } };
+      }));
 const PAY = "https://pay.test/invoice/hide-and-haunt-deposit";
 const board = (gid, extra = {}) => ({ id: gid, kind: "storyboard", title: "Hide & Haunt storyboard v1", locked: false, selection_limit: null,
   review_outcome: null, reviewed_at: null, pay_url: null, ...extra,
@@ -90,6 +102,8 @@ async function wire(page, errors) {
     if (fn === "bk_extra_edit_cents") return route.fulfill({ json: 3500 });
     const s = body.p_token === "tok" ? get(body.p_project) : null;
     if (!s) return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ message: "not_found" }) });
+    if (fn === "bk_crm_portal_quotes") return route.fulfill({json:{rows:[]}});
+    if (fn === "bk_crm_portal_billing") return route.fulfill({json:{billing_provider:"stripe",external_billing_url:null,paid_amounts:[]}});
     if (fn === "bk_portal") return route.fulfill({ json: { project: s.p, invoices: s.inv, contracts: s.contracts, files: s.files, messages: s.msgs } });
     if (fn === "bk_portal_send") { s.msgs.push({ id: `m${s.msgs.length + 1}`, sender: "client", created_at: new Date().toISOString(), body: body.p_body }); return route.fulfill({ json: null }); }
     return route.fulfill({ status: 404, json: {} });
@@ -144,7 +158,8 @@ const reviewSent = () => calls.filter((c) => c.body.action === "storyboard_submi
 const idx = (c) => FRAMES.findIndex((f) => f.meta.code === c) + 1;
 
 try {
-  browser = await chromium.launch();
+  ok(FRAMES.length === 27 && new Set(FRAMES.map((f) => f.meta.scene_no)).size === 8 && new Set(FRAMES.map((f) => f.meta.code)).size === 27, "fixture has 27 unique frames across 8 scenes");
+  browser = await chromium.launch(process.env.PW_CHROME ? { executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" } : {});
   const ctx = await browser.newContext({ viewport: { width: 1536, height: 1024 } });
   const errors = [];
   const page = await ctx.newPage();

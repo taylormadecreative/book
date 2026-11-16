@@ -1,0 +1,16 @@
+project_id = "taylormade-crm"
+
+# Each public function authorizes the request itself: project token, Stripe
+# signature, signed Resend webhook, or the private scheduled-worker secret.
+[functions.bk-create-checkout]
+verify_jwt = false
+[functions.bk-stripe-webhook]
+verify_jwt = false
+[functions.bk-media]
+verify_jwt = false
+[functions.bk-mailer]
+verify_jwt = false
+[functions.bk-charge-balances]
+verify_jwt = false
+[functions.bk-inbound-email]
+verify_jwt = false
