@@ -160,6 +160,26 @@ async function wire(page, errors) {
 const url = (pid, extra = "") => `${BASE}/portal.html?p=${pid}&t=tok${extra}`;
 const text = async (page, sel) => (await page.locator(sel).first().textContent()).replace(/\s+/g, " ").trim();
 async function overflow(page) { return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth); }
+// A real swipe starts with the gallery on screen. WebKit may defer scroll/paint
+// callbacks for an offscreen scroller, so wait for the rendered dot state rather
+// than assuming a fixed delay is enough on every engine and runner.
+async function swipeFinalsToEnd(page) {
+  const grid = page.locator(".g-grid-final");
+  await grid.scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => {
+    const r = document.querySelector(".g-grid-final").getBoundingClientRect();
+    return r.top < innerHeight && r.bottom > 0;
+  });
+  await grid.evaluate((g) => g.scrollTo({ left: g.scrollWidth }));
+  await page.waitForFunction(() => {
+    const g = document.querySelector(".g-grid-final");
+    const cells = g.querySelectorAll(".g-cell.final");
+    const dots = [...g.parentElement.querySelectorAll(".g-dots i")];
+    return g.scrollLeft >= g.scrollWidth - g.clientWidth - 2 &&
+      dots.filter((d) => d.classList.contains("on")).length === 1 &&
+      dots.findIndex((d) => d.classList.contains("on")) === cells.length - 1;
+  }, null, { timeout: 5000 });
+}
 
 try {
   browser = await chromium.launch(process.env.PW_CHROME ? { executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" } : {});
@@ -481,8 +501,7 @@ try {
     return { scrolls: g.scrollWidth > g.clientWidth, first: cells[0].left, peek: cells[1].left < innerWidth, sameRow: cells[0].top === cells[2].top, dots: document.querySelectorAll(".g-dots i").length };
   });
   ok(row.scrolls && row.sameRow && row.peek && row.first >= 15 && row.first <= 17 && row.dots === 3, "phone: finals in one swipe row with a peek: " + JSON.stringify(row));
-  await page.locator(".g-grid-final").evaluate((g) => g.scrollTo({ left: g.scrollWidth }));
-  await page.waitForTimeout(300);
+  await swipeFinalsToEnd(page);
   const end = await page.evaluate(() => { const r = [...document.querySelectorAll(".g-cell.final")].pop().getBoundingClientRect(); return { right: r.right, left: r.left, on: [...document.querySelectorAll(".g-dots i")].findIndex((d) => d.classList.contains("on")) }; });
   ok(end.right <= 390 - 15 && end.left > 0 && end.on === 2, "phone: last card fully on screen, third dot lit: " + JSON.stringify(end));
   ok((await overflow(page)) <= 0, "phone: swipe row doesn't widen the page");
@@ -520,8 +539,7 @@ try {
   ok((await text(wp, "#headline")) === "Your photos are ready.", "webkit: ready headline");
   ok((await overflow(wp)) <= 0, "webkit: no horizontal scroll");
   await wp.waitForFunction(() => [...document.querySelectorAll(".g-cell.final img")].every((i) => i.complete && i.naturalWidth));
-  await wp.locator(".g-grid-final").evaluate((g) => g.scrollTo({ left: g.scrollWidth }));
-  await wp.waitForTimeout(400);
+  await swipeFinalsToEnd(wp);
   const wend = await wp.evaluate(() => { const r = [...document.querySelectorAll(".g-cell.final")].pop().getBoundingClientRect(); return { right: Math.round(r.right), on: [...document.querySelectorAll(".g-dots i")].findIndex((d) => d.classList.contains("on")) }; });
   ok(wend.right <= 390 - 15 && wend.on === 2, "webkit: swipe row ends with the last card fully on screen: " + JSON.stringify(wend));
   if (SHOTS) await wp.screenshot({ path: `${SHOTS}/webkit-390-swiped.png` });
