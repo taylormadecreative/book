@@ -1,0 +1,369 @@
+/* Open money: Studio family. One ink tile carries the gold total; everything
+   else is paper, hairlines and the existing CRM type. */
+.money {
+  min-width: 0;
+  max-width: 1080px;
+}
+
+/* Totals */
+.money-totals {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.6fr) repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+.money-total {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 16px 22px;
+  border-left: 1px solid var(--line);
+  min-width: 0;
+}
+.money-total span {
+  font: 500 14px var(--ui);
+  color: var(--paper-muted);
+}
+.money-total b {
+  font: 2.1rem/1 var(--display);
+  color: var(--paper-ink);
+  font-variant-numeric: tabular-nums;
+}
+.money-total.is-alert b {
+  color: var(--red);
+}
+.money-total.is-open {
+  background: var(--ink);
+  border: 0;
+  border-radius: 7px;
+  padding: 18px 22px 16px;
+}
+.money-total.is-open span,
+.money-total.is-open small {
+  color: var(--muted);
+}
+.money-total.is-open b {
+  color: var(--gold);
+  font-size: clamp(2.4rem, 4.2vw, 3.4rem);
+  overflow-wrap: anywhere;
+}
+.money-total small {
+  font: 14px var(--ui);
+}
+.money-held {
+  margin: 10px 0 0;
+  font: 14px var(--ui);
+  color: var(--paper-muted);
+}
+.money-honest {
+  margin: 12px 0 0;
+  max-width: 70ch;
+  font-size: 14px;
+  color: var(--paper-muted);
+}
+
+/* Toolbar and form */
+.money-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin: 22px 0 18px;
+}
+.money-form {
+  padding: 22px;
+  margin-bottom: 26px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.money-form h2 {
+  font-size: 1.35rem;
+  margin-bottom: 16px;
+}
+.money-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.money-form-grid .full {
+  grid-column: 1 / -1;
+}
+.money-more {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.money-more summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  min-height: 44px;
+  font: 600 15px var(--ui);
+  color: var(--gold-ink);
+  cursor: pointer;
+}
+.money-more summary::-webkit-details-marker {
+  display: none;
+}
+.money-more summary::before {
+  content: "+";
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font: 14px/1 var(--mono);
+}
+.money-more[open] summary::before {
+  content: "\2212";
+}
+.money-more[open] summary {
+  margin-bottom: 12px;
+}
+.money-form .actions {
+  margin-top: 18px;
+}
+.money-form .form-error:empty {
+  display: none;
+}
+
+/* Groups */
+.money-group {
+  margin-top: 30px;
+}
+.money-group h2 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 1.5rem;
+  margin: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--paper-ink);
+}
+.money-count {
+  margin-left: 6px;
+  font: 13px var(--mono);
+  color: var(--paper-muted);
+}
+.money-empty {
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+/* Rows */
+.money-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, auto);
+  grid-template-areas:
+    "main side"
+    "actions actions"
+    "close close";
+  gap: 10px 28px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+.money-main {
+  grid-area: main;
+  min-width: 0;
+}
+.money-client {
+  font: 600 1.15rem var(--ui);
+  margin: 0 0 2px;
+  overflow-wrap: anywhere;
+}
+.money-title {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+.money-facts {
+  margin: 0;
+  font-size: 14px;
+  color: var(--paper-muted);
+}
+.money-label {
+  font: 500 11px var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--paper-muted);
+}
+.money-next {
+  margin: 10px 0 0;
+  font: 500 15px var(--ui);
+}
+.money-next .money-label {
+  margin-right: 6px;
+}
+.money-when {
+  color: var(--paper-muted);
+  white-space: nowrap;
+}
+.money-when.is-due {
+  color: var(--gold-ink);
+  font-weight: 600;
+}
+.money-staged,
+.money-hold {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 5px;
+  max-width: 64ch;
+}
+.money-staged {
+  background: #e9b94929;
+  border: 1px solid #e9b94980;
+}
+.money-staged .money-label {
+  color: var(--gold-ink);
+}
+.money-hold {
+  border: 1px dashed #bcb5a7;
+}
+.money-staged p,
+.money-hold p {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+.money-notes {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--paper-muted);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.money-side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  text-align: right;
+}
+.money-amount {
+  font: 1.7rem/1.05 var(--display);
+  font-variant-numeric: tabular-nums;
+}
+.money-amount.is-unpriced {
+  font: 500 15px var(--ui);
+  color: var(--paper-muted);
+}
+.money-step {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid #bcb5a7;
+  border-radius: 999px;
+  font: 600 13px var(--ui);
+}
+.money-due,
+.money-outcome {
+  margin: 0;
+  font: 500 14px var(--ui);
+  color: var(--paper-muted);
+}
+.money-due.is-late {
+  color: var(--red);
+  font-weight: 600;
+}
+.money-outcome.is-paid {
+  color: var(--green);
+  font-weight: 600;
+}
+.money-actions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.money-closeout {
+  grid-area: close;
+  padding: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.money-outcomes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.money-closeout p {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--paper-muted);
+}
+.money-row.is-hold .money-main,
+.money-row.is-hold .money-side {
+  opacity: 0.72;
+}
+.money-row.is-hold .money-amount {
+  font-size: 1.35rem;
+}
+
+/* Today line */
+.money-line {
+  margin: 0 0 22px;
+}
+.money-line a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font: 600 15px var(--ui);
+  color: var(--gold-ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+@media (max-width: 860px) {
+  .money-totals {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .money-total.is-open {
+    grid-column: 1 / -1;
+    border-radius: 7px;
+    margin-bottom: 4px;
+  }
+  .money-total:nth-child(2) {
+    border-left: 0;
+    padding-left: 0;
+  }
+  .money-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .money-total {
+    padding: 12px 10px;
+  }
+  .money-total b {
+    font-size: 1.7rem;
+  }
+  .money-total span {
+    font-size: 13px;
+  }
+  .money-form {
+    padding: 16px;
+  }
+  .money-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .money-row {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "main"
+      "side"
+      "actions"
+      "close";
+  }
+  .money-side {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 12px;
+    text-align: left;
+  }
+  .money-actions .btn.small,
+  .money-outcomes .btn.small {
+    min-height: 44px;
+    flex: 1 1 auto;
+  }
+}
