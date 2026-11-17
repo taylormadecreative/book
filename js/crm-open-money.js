@@ -200,11 +200,31 @@ export function mountOpenMoney(root, { rpc, toast, onDirty, openProject } = {}) 
     if (typeof onDirty === "function") onDirty(value);
   };
 
+  // A remount (Refresh, coming back to the screen) starts clean, so the shell
+  // never keeps asking about changes that are already gone.
+  if (typeof onDirty === "function") onDirty(false);
   root.innerHTML = '<section class="money"><p class="muted" role="status">Loading…</p></section>';
+
+  // The open form is a live node: re-rendering the list after a close out or
+  // reopen moves it into the new slot instead of throwing away what was typed.
+  const openForm_ = () => root.querySelector("[data-money-form-slot] form");
+  function restoreForm(form) {
+    const slot = root.querySelector("[data-money-form-slot]");
+    if (form && slot) slot.append(form);
+    else if (form) closeForm();
+  }
+  function busyWithForm() {
+    const form = openForm_();
+    if (!form || !dirty) return false;
+    form.querySelector("[data-money-error]").textContent = "Save or cancel this first.";
+    form.querySelector('[name="client_name"]')?.focus();
+    return true;
+  }
 
   function render(board) {
     rows = Array.isArray(board.rows) ? board.rows : [];
     const closed = show === "closed";
+    const form = openForm_();
     root.innerHTML = `<section class="money" aria-live="polite">` +
       totalsHtml(board.totals || {}) +
       `<p class="money-honest">${esc(HONEST)}</p>` +
@@ -215,6 +235,7 @@ export function mountOpenMoney(root, { rpc, toast, onDirty, openProject } = {}) 
       `<div data-money-form-slot></div>` +
       groupsHtml(rows, closed) +
       `</section>`;
+    restoreForm(form);
   }
 
   async function load() {
@@ -226,9 +247,11 @@ export function mountOpenMoney(root, { rpc, toast, onDirty, openProject } = {}) 
       render(board);
     } catch (error) {
       if (!root.isConnected || current !== sequence) return;
-      root.innerHTML = `<section class="money"><p class="form-error" role="alert">${
+      const form = openForm_();
+      root.innerHTML = `<section class="money"><div data-money-form-slot></div><p class="form-error" role="alert">${
         esc(error?.message || "The list could not load.")
       }</p><button class="btn" type="button" data-money-retry>Try again</button></section>`;
+      restoreForm(form);
     }
   }
 
@@ -306,7 +329,8 @@ export function mountOpenMoney(root, { rpc, toast, onDirty, openProject } = {}) 
         notify("Saved.");
       });
     } catch (error) {
-      if (root.isConnected) message.textContent = errorText(error);
+      if (form.isConnected) message.textContent = errorText(error);
+      else notify(errorText(error));
     }
   });
 
@@ -317,15 +341,16 @@ export function mountOpenMoney(root, { rpc, toast, onDirty, openProject } = {}) 
     const row = article ? rows.find((r) => r.id === article.dataset.id) : null;
 
     if (button.hasAttribute("data-money-retry")) return load();
-    if (button.hasAttribute("data-money-add")) return openForm(null);
+    if (button.hasAttribute("data-money-add")) return busyWithForm() || openForm(null);
     if (button.hasAttribute("data-money-cancel")) return closeForm();
     if (button.hasAttribute("data-money-show")) {
+      if (busyWithForm()) return;
       show = show === "open" ? "closed" : "open";
       closeForm();
       return load();
     }
     if (!row) return;
-    if (button.hasAttribute("data-money-edit")) return openForm(row);
+    if (button.hasAttribute("data-money-edit")) return busyWithForm() || openForm(row);
     if (button.dataset.moneyProject) {
       if (typeof openProject === "function") await openProject(button.dataset.moneyProject);
       return;

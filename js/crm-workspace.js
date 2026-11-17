@@ -1387,7 +1387,10 @@ document.addEventListener("click", async (e) => {
     state.taskFilter = b.dataset.taskFilter;
     state.taskOffset = 0;
     await mutateButton(b, async () => {
-      if (await loadTasks()) renderToday();
+      if (await loadTasks()) {
+        renderToday();
+        mountTool("#openMoneyLine", mountOpenMoneyLine);
+      }
     });
     return;
   }
@@ -1398,7 +1401,10 @@ document.addEventListener("click", async (e) => {
       state.taskOffset + (b.dataset.taskPage === "next" ? 30 : -30),
     );
     await mutateButton(b, async () => {
-      if (await loadTasks()) renderToday();
+      if (await loadTasks()) {
+        renderToday();
+        mountTool("#openMoneyLine", mountOpenMoneyLine);
+      }
     });
     return;
   }

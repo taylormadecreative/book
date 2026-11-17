@@ -186,6 +186,19 @@ try {
     );
     await page.locator("#mainNav [data-view=today]").click();
     await page.waitForSelector(".task-title");
+    await page.locator("[data-task-filter]").filter({ hasText: "All open" })
+      .click();
+    await page.locator("#openMoneyLine a").waitFor({ timeout: 5000 });
+    ok(
+      (await page.locator("#openMoneyLine a").textContent()).includes(
+        "Open money: $2,500.00",
+      ),
+      "the open money line survives a task filter",
+    );
+    await page.locator("[data-task-filter]").filter({
+      hasText: "Due & overdue",
+    }).click();
+    await page.waitForSelector(".task-title");
     await page.locator("[data-task-toggle]").click();
     await page.waitForFunction(() => window.__crm.tasks[0].status === "done");
     await page.getByRole("heading", {

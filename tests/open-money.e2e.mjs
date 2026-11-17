@@ -238,6 +238,10 @@ try {
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(origin + "/__money_test");
     await mount(page);
+    ok(
+      await page.evaluate(() => window.dirty[0] === false),
+      "mounting clears a stale unsaved-changes flag",
+    );
 
     if (hold) {
       console.log("open-money preview: stubbed screen open at 1512px. Close the browser to finish.");
@@ -423,6 +427,38 @@ try {
     await money.getByRole("button", { name: "Show open" }).click();
     await money.locator(".money-row", { hasText: "Website proposal, revised" }).waitFor();
 
+    // 7b. an open form survives work on other rows
+    await money.getByRole("button", { name: "+ Add" }).click();
+    await form.locator('[name="client_name"]').fill("Synthetic Half Typed");
+    const headshot = money.locator(".money-row", { hasText: "Synthetic headshot quote" });
+    await headshot.getByRole("button", { name: "Close out" }).click();
+    await headshot.getByRole("button", { name: "Dropped" }).click();
+    await money.locator(".money-row", { hasText: "Synthetic headshot quote" })
+      .waitFor({ state: "detached" });
+    ok(
+      await form.locator('[name="client_name"]').inputValue() ===
+        "Synthetic Half Typed",
+      "closing another row keeps the typed form",
+    );
+    await money.locator(".money-row", { hasText: "Synthetic Bakery" })
+      .getByRole("button", { name: "Edit" }).click();
+    await form.locator('[role="alert"]', {
+      hasText: "Save or cancel this first.",
+    }).waitFor();
+    ok(
+      await form.locator('[name="client_name"]').inputValue() ===
+        "Synthetic Half Typed",
+      "Edit on another row does not throw away typed text",
+    );
+    await money.getByRole("button", { name: "Show closed" }).click();
+    ok(
+      await form.locator('[name="client_name"]').inputValue() ===
+        "Synthetic Half Typed" &&
+        await money.getByRole("button", { name: "Show closed" }).count() === 1,
+      "Show closed waits while a form has typed text",
+    );
+    await form.getByRole("button", { name: "Cancel" }).click();
+
     // 8. copy tracking code
     const key = await page.evaluate(() =>
       window.items.find((row) => row.client_name === "Synthetic Bakery").view_key
@@ -477,7 +513,7 @@ try {
     ok(
       (await line.getAttribute("href")).endsWith("?view=money") &&
         (await line.textContent()).replace(/\s+/g, " ").trim() ===
-          "Open money: $8,800.50 across 5 items · 1 your move · 1 overdue",
+          "Open money: $8,800.50 across 4 items · 1 your move · 1 overdue",
       "today line: " + await line.textContent(),
     );
     await page.evaluate(async () => {
