@@ -332,8 +332,15 @@ async function openItem(id, { fresh = false, focus = false } = {}) {
   if (seq !== state.seq) return;
   // fresh = he just sent from here: the thread shows his reply, and the box starts empty instead of re-suggesting
   const saved = fresh ? null : loadDraft(id);
-  renderTemplates(saved != null || fresh ? "" : "suggested");
-  setDraft(fresh ? "" : saved != null ? saved : buildDraft(item, state.slots, "suggested"));
+  const requested = new URLSearchParams(location.search);
+  const requestedKind = requested.get('p') === id && ['call', 'suggested', 'blank'].includes(requested.get('template'))
+    ? requested.get('template') : 'suggested';
+  renderTemplates(saved != null || fresh ? "" : requestedKind);
+  setDraft(fresh ? "" : saved != null ? saved : buildDraft(item, state.slots, requestedKind));
+  if (requested.has('template')) {
+    requested.delete('template');
+    history.replaceState({}, '', '?' + requested.toString());
+  }
   $("#draft").dataset.dirty = saved != null && wasTyped(id) ? "1" : "0";
   $("#draft").scrollTop = 0;
   state.draftLoading = false; paintPending();

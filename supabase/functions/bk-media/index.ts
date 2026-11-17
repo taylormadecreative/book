@@ -61,12 +61,21 @@ const previewPath = (p: string) => p.replace(/([^/]+)$/, "preview/$1");
 // Once Nelson closes the preview, only a still is left: preview/<name>.jpg (none = a plain dark frame).
 const posterPath = (p: string) => previewPath(p).replace(/\.[^./]+$/, "") + ".jpg";
 
+// Tie the actual HTTP cache key to the entitled object revision, not merely
+// the player metadata. Storage may reuse a signed URL for an overwritten path.
+export function withVideoAssetNonce(url: string | null, assetKey: string | null): string | null {
+  if (!url || !assetKey) return url;
+  const versioned = new URL(url);
+  versioned.searchParams.set("cacheNonce", assetKey);
+  return versioned.href;
+}
+
 // Batch-sign: one storage call for every inline URL and one for every thumb,
 // instead of one call per item (a 400-photo proofing gallery would be 800+ calls).
 // Items in a held gallery sign only their preview: the original never leaves storage before it's paid,
 // and a missing preview comes back as no link at all, never the original. A closed preview signs no video:
 // its still goes out as the thumb.
-async function signItems(db: ReturnType<typeof svc>, items: any[], kindByGallery: Record<string, string>, held: Set<string>, closed: Set<string>) {
+async function signItems(db: ReturnType<typeof svc>, items: any[], kindByGallery: Record<string, string>, held: Set<string>, closed: Set<string>, bindings: Map<string, any>) {
   if (!items.length) return [];
   const bucket = db.storage.from(BUCKET);
   const paths = items.map((it) => closed.has(it.gallery_id) ? posterPath(it.storage_path)
@@ -82,17 +91,28 @@ async function signItems(db: ReturnType<typeof svc>, items: any[], kindByGallery
     // proofs are for picking and storyboards are for reviewing (the frames are Nelson's); finals + video keep a named download link
     let download_url: string | null = null;
     const kind = kindByGallery[it.gallery_id];
+    const binding = bindings.get(it.id);
+    const assetKey: string | null = kind === "video" && !closed.has(it.gallery_id)
+      ? (held.has(it.gallery_id) ? binding?.preview_key : binding?.clean_key) ?? null
+      : null;
+    const inlineUrl = closed.has(it.gallery_id) ? null : inlineBy.get(paths[i]) ?? null;
     if ((kind === "final" || kind === "video") && !held.has(it.gallery_id)) {
       const dl = await bucket.createSignedUrl(it.storage_path, SIGN_TTL, { download: it.filename || "download" });
-      download_url = dl.data?.signedUrl || null;
+      const signedDownload = dl.data?.signedUrl || null;
+      download_url = kind === "video"
+        ? withVideoAssetNonce(signedDownload, assetKey)
+        : signedDownload;
     }
     return {
       id: it.id, gallery_id: it.gallery_id, filename: it.filename, content_type: it.content_type,
       size_bytes: it.size_bytes, sort: it.sort, selected: it.selected,
       meta: it.meta || {}, client_note: it.client_note ?? null,
-      url: closed.has(it.gallery_id) ? null : inlineBy.get(paths[i]) ?? null,
+      url: kind === "video" ? withVideoAssetNonce(inlineUrl, assetKey) : inlineUrl,
       thumb_url: (closed.has(it.gallery_id) ? inlineBy.get(paths[i]) : thumbBy.get(thumbPath(paths[i]))) ?? null,
       download_url,
+      // The review UI binds to this exact entitled player, never merely an item ID.
+      media_revision: kind === "video" ? binding?.media_revision ?? null : null,
+      asset_key: assetKey,
     };
   }));
 }
@@ -154,7 +174,14 @@ Deno.serve(async (req: Request) => {
       // closed = Nelson stopped the preview (she's seen it): no video until it's paid
       const closed = new Set<string>((galleries || [])
         .filter((g: any) => held.has(g.id) && g.preview_closed_at).map((g: any) => g.id));
-      const signed = await signItems(db, items || [], kindByGallery, held, closed);
+      const bindings = new Map<string, any>();
+      if ((galleries || []).some((g: any) => g.kind === "video")) {
+        const { data: revisionData, error } = await db.rpc("bk_crm_media_bindings", { p_projects: pids });
+        // A binding lookup failure keeps normal media delivery available, but returns
+        // no review key, so the UI cannot approve a potentially different player.
+        if (!error) for (const binding of revisionData?.rows || []) bindings.set(binding.id, binding);
+      }
+      const signed = await signItems(db, items || [], kindByGallery, held, closed, bindings);
       const byGallery: Record<string, any[]> = {};
       for (const s of signed) (byGallery[s.gallery_id] ||= []).push(s);
 

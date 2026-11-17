@@ -1,3 +1,4 @@
+// Client, project and venue details in this fixture are synthetic.
 import { fileURLToPath } from "node:url";
 // Stubbed UI test for storyboard review in the client portal (portal.html). Serves the repo locally;
 // every Supabase call is intercepted, so it never touches prod. The stub mirrors what bk-media and the
@@ -22,7 +23,7 @@ let browser, failures = 0, checks = 0;
 const ok = (cond, msg) => { checks++; if (!cond) { failures++; console.error("FAIL:", msg); } };
 const done = async () => { try { await browser?.close(); } catch (_) {} srv.kill(); };
 
-/* ---------------- fixtures: the Hide & Haunt storyboard (27 frames, 8 scenes) ---------------- */
+/* ---------------- fixtures: the Synthetic Campaign storyboard (27 frames, 8 scenes) ---------------- */
 const FRAMES = IMAGES && existsSync(`${IMAGES}/frames.json`) ? JSON.parse(readFileSync(`${IMAGES}/frames.json`, "utf8"))
   // Explicit scene lengths keep the synthetic board aligned with the 8-scene,
   // 27-frame review flow. Grouping every four frames produces only seven scenes.
@@ -36,8 +37,8 @@ const FRAMES = IMAGES && existsSync(`${IMAGES}/frames.json`) ? JSON.parse(readFi
           action: `Action for frame ${i + 1}.`, line: i % 3 ? "" : `JAKE: "Line ${i + 1}"`,
         } };
       }));
-const PAY = "https://pay.test/invoice/hide-and-haunt-deposit";
-const board = (gid, extra = {}) => ({ id: gid, kind: "storyboard", title: "Hide & Haunt storyboard v1", locked: false, selection_limit: null,
+const PAY = "https://pay.test/invoice/synthetic-campaign-deposit";
+const board = (gid, extra = {}) => ({ id: gid, kind: "storyboard", title: "Synthetic Campaign storyboard v1", locked: false, selection_limit: null,
   review_outcome: null, reviewed_at: null, pay_url: null, ...extra,
   items: FRAMES.map((f) => ({ id: `${gid}-${f.meta.code}`, gallery_id: gid, filename: f.file, size_bytes: 400000, sort: f.sort, selected: false,
     content_type: "image/jpeg", meta: f.meta, client_note: (extra.notes || {})[f.meta.code] || null,
@@ -45,13 +46,13 @@ const board = (gid, extra = {}) => ({ id: gid, kind: "storyboard", title: "Hide 
 // the location review: 4 reference images of the building, no scenes, no timecodes
 const LOCS = IMAGES && existsSync(`${IMAGES}/location.json`) ? JSON.parse(readFileSync(`${IMAGES}/location.json`, "utf8"))
   : "ABCD".split("").map((c, i) => ({ sort: i + 1, file: `location-${c}.jpg`, meta: { code: c, action: `Location image ${c}.`, ...(c === "A" || c === "D" ? { feature: true } : {}) } }));
-const locBoard = (gid, extra = {}) => ({ ...board(gid, extra), title: "Hide & Haunt location", purpose: "location",
+const locBoard = (gid, extra = {}) => ({ ...board(gid, extra), title: "Synthetic Campaign location", purpose: "location",
   items: LOCS.map((f) => ({ id: `${gid}-${f.meta.code}`, gallery_id: gid, filename: f.file, size_bytes: 500000, sort: f.sort, selected: false,
     content_type: "image/jpeg", meta: f.meta, client_note: null, url: `https://img.test/full/${f.file}`, thumb_url: `https://img.test/thumbs/${f.file}`, download_url: null })) });
-const NAME = "Delilah Amaro";
-const project = (id, extra) => ({ id, title: `${NAME} — Hide & Haunt Commercial`, status: "booked", service: "other", location: null,
+const NAME = "Synthetic Video Client";
+const project = (id, extra) => ({ id, title: `${NAME} — Synthetic Campaign Commercial`, status: "booked", service: "other", location: null,
   created_at: "2026-10-22T19:04:26Z", event_date: null, event_time: null, client_name: NAME, ...extra });
-const msgs = () => [{ id: "m1", sender: "studio", created_at: "2026-10-24T21:01:29Z", body: "Hi Delilah, here's your quote." }];
+const msgs = () => [{ id: "m1", sender: "studio", created_at: "2026-10-24T21:01:29Z", body: "Hi Synthetic, here's your quote." }];
 
 const S = {
   board: () => ({ p: project("p-board"), galleries: [board("gb", { pay_url: PAY })] }),
@@ -59,7 +60,7 @@ const S = {
   nopay: () => ({ p: project("p-nopay"), galleries: [board("gn")] }),
   round2: () => ({ p: project("p-round2"), galleries: [
     board("g1", { locked: true, review_outcome: "changes", reviewed_at: "2026-10-27T15:00:00Z", notes: { "3C": "Make him look at the camera." } }),
-    { ...board("g2"), title: "Hide & Haunt storyboard v2" }] }),
+    { ...board("g2"), title: "Synthetic Campaign storyboard v2" }] }),
   approved: () => ({ p: project("p-approved"), galleries: [board("gd", { locked: true, review_outcome: "approved", reviewed_at: "2026-10-27T15:00:00Z", pay_url: PAY })] }),
   // her real state after round one: the storyboard went back with notes, the location is up for approval
   loc: () => ({ p: project("p-loc"), galleries: [
@@ -103,6 +104,8 @@ async function wire(page, errors) {
     const s = body.p_token === "tok" ? get(body.p_project) : null;
     if (!s) return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ message: "not_found" }) });
     if (fn === "bk_crm_portal_quotes") return route.fulfill({json:{rows:[]}});
+    if (fn === "bk_portal_preparation") return route.fulfill({json:{current:null,history:[]}});
+    if (["bk_portal_video_reviews", "bk_ops_portal_retainers"].includes(fn)) return route.fulfill({json:{rows:[]}});
     if (fn === "bk_crm_portal_billing") return route.fulfill({json:{billing_provider:"stripe",external_billing_url:null,paid_amounts:[]}});
     if (fn === "bk_portal") return route.fulfill({ json: { project: s.p, invoices: s.inv, contracts: s.contracts, files: s.files, messages: s.msgs } });
     if (fn === "bk_portal_send") { s.msgs.push({ id: `m${s.msgs.length + 1}`, sender: "client", created_at: new Date().toISOString(), body: body.p_body }); return route.fulfill({ json: null }); }
@@ -165,14 +168,14 @@ try {
   const page = await ctx.newPage();
   await wire(page, errors);
 
-  /* --- Delilah's first look --- */
+  /* --- Synthetic client's first look --- */
   await page.goto(url("p-board"));
   await page.waitForSelector("#app:not([hidden])");
   await waitImgs(page);
   ok((await text(page, "#headline")) === "Your storyboard is ready.", "storyboard headline: " + await text(page, "#headline"));
   ok((await text(page, "#heroCta .btn")) === "Review your storyboard", "hero button");
   ok((await text(page, "#heroCta .hero-note")) === "27 frames · approve it or request changes", "hero note");
-  ok((await text(page, "#pTitle")) === "Delilah Amaro — Hide & Haunt Commercial", "project title");
+  ok((await text(page, "#pTitle")) === "Synthetic Video Client — Synthetic Campaign Commercial", "project title");
   ok((await text(page, "#tab-photos .t-long")) === "Storyboard", "first tab is called Storyboard");
   ok((await page.locator(".tab[aria-selected=true]").getAttribute("id")) === "tab-photos", "storyboard tab opens first");
   ok((await page.locator(".sb-scene").count()) === 8 && (await page.locator(".sb-frame").count()) === 27, "8 scenes, 27 frames");
@@ -339,7 +342,7 @@ try {
   await page.waitForURL(PAY, { timeout: 6000 });
   ok(page.url() === PAY, "approving opens her deposit invoice");
   ok(calls.some((c) => c.body.action === "storyboard_submit" && c.body.expect === "approved" && c.body.expect_notes === 0), "approve sent");
-  ok(state["p-approve"].msgs.some((m) => m.body === 'I approved the storyboard "Hide & Haunt storyboard v1" (27 frames).'), "Nelson's message in her voice");
+  ok(state["p-approve"].msgs.some((m) => m.body === 'I approved the storyboard "Synthetic Campaign storyboard v1" (27 frames).'), "Nelson's message in her voice");
 
   /* --- coming back after approving --- */
   await page.goto(url("p-approved"));
@@ -408,7 +411,7 @@ try {
   ok(page.url().startsWith(BASE), "approving a location stays in the portal (no invoice)");
   ok(/^Location approved/.test(await text(page, ".sb .sb-status .g-sent")) && /Nelson is updating your storyboard in this building/.test(await text(page, ".sb .sb-status")), "location approved status");
   ok((await text(page, "#headline")) === "Location approved." && /updating your storyboard in this building/.test(await text(page, "#heroCta")), "location approved hero");
-  ok(state["p-loc"].msgs.some((m) => m.body === 'I approved the location "Hide & Haunt location" (4 images).'), "Nelson's location message");
+  ok(state["p-loc"].msgs.some((m) => m.body === 'I approved the location "Synthetic Campaign location" (4 images).'), "Nelson's location message");
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/14-location-approved-1536.png` });
 
   /* --- location: send a note instead --- */
@@ -426,7 +429,7 @@ try {
   await nbar.locator("[data-sb=send]").click();
   await page.locator(".sb").first().locator(".sb-bar:not(.live)").waitFor();
   ok((await text(page, "#headline")) === "Your notes are with Nelson." && /images you flagged/.test(await text(page, "#heroCta")), "location notes hero: " + await text(page, "#headline") + " | " + await text(page, "#heroCta"));
-  ok(state["p-locnotes"].msgs.some((m) => /^My notes on 1 image of "Hide & Haunt location"/.test(m.body)), "location notes message");
+  ok(state["p-locnotes"].msgs.some((m) => /^My notes on 1 image of "Synthetic Campaign location"/.test(m.body)), "location notes message");
 
   ok(!errors.length, "no console errors: " + errors.join(" | "));
 

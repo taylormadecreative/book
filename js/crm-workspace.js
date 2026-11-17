@@ -16,6 +16,22 @@ import {
   time,
   totalLines,
 } from "./crm-workspace-view.js?v=1";
+import { mountClientExperience } from "./crm-client-experience.js?v=1";
+import { mountOperations, mountOperationsView } from "./crm-operations.js?v=1";
+import {
+  mountFollowupSettings,
+  mountMorningList,
+  mountSourceReport,
+} from "./crm-growth-tools.js?v=1";
+import {
+  mountQuickCapture,
+  receiveSharedCapture,
+} from "./crm-quick-capture.js?v=1";
+receiveSharedCapture();
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch(() => {});
+}
+const extensionDirty = new Set();
 const sb = window.supabase.createClient(
   window.BK.SUPABASE_URL,
   window.BK.SUPABASE_KEY,
@@ -375,11 +391,42 @@ function markNav() {
   });
 }
 function canLeave() {
-  return !state.dirty || confirm("Leave without saving your changes?");
+  return (!state.dirty && !extensionDirty.size) ||
+    confirm("Leave without saving your changes?");
+}
+function extensionContext(name) {
+  return {
+    rpc,
+    toast,
+    staff: state.staff,
+    project: state.detail?.project,
+    onDirty(dirty) {
+      dirty ? extensionDirty.add(name) : extensionDirty.delete(name);
+    },
+    onChange: refreshContent,
+    openProject(id) {
+      return navigate("pipeline", id);
+    },
+  };
+}
+function mountTool(selector, mount, context = {}) {
+  const root = $(selector);
+  if (!root) return;
+  root.dataset.crmExtension = "";
+  root.innerHTML = '<p class="muted" role="status">Loading…</p>';
+  Promise.resolve().then(() =>
+    mount(root, { ...extensionContext(selector), ...context })
+  ).catch((error) => {
+    if (!root.isConnected) return;
+    root.innerHTML = `<section class="section"><p role="alert">${
+      esc(error?.message || "This tool could not load. Try again.")
+    }</p><button class="btn small" data-extension-retry>Try again</button></section>`;
+  });
 }
 async function navigate(view, project = null, { replace = false } = {}) {
   if (!canLeave()) return;
   state.dirty = false;
+  extensionDirty.clear();
   state.view = view;
   state.project = project;
   state.offset = 0;
@@ -416,6 +463,29 @@ async function load() {
       }
       state.detail = d;
       renderDetail();
+      mountTool("#clientExperience", mountClientExperience);
+      mountTool("#projectOperations", mountOperations);
+      mountTool("#followupSettings", mountFollowupSettings);
+    } else if (["capacity", "retainers", "profit"].includes(state.view)) {
+      const titles = {
+        capacity: "Editing workload",
+        retainers: "Monthly packages",
+        profit: "Project earnings",
+      };
+      workspace.innerHTML = head(
+        titles[state.view],
+        "",
+        '<button class="btn" data-refresh>Refresh</button>',
+      ) + '<div id="operationsView"></div>';
+      mountTool("#operationsView", mountOperationsView, { view: state.view });
+    } else if (state.view === "capture") {
+      workspace.innerHTML = '<div id="captureWorkspace"></div>';
+      mountTool("#captureWorkspace", mountQuickCapture, {
+        userId: state.userId,
+        onCreated(id) {
+          return navigate("pipeline", id);
+        },
+      });
     } else if (state.view === "today" || state.view === "reports") {
       const d = await rpc("bk_crm_dashboard");
       if (seq !== state.seq) return;
@@ -429,6 +499,10 @@ async function load() {
       state.health = null;
       state.healthStatus = "loading";
       state.view === "reports" ? renderReports() : renderToday();
+      if (state.view === "today") mountTool("#morningList", mountMorningList);
+      if (state.view === "reports") {
+        mountTool("#sourceReport", mountSourceReport);
+      }
       loadHealth(seq);
     } else if (state.view === "clients") {
       const d = await rpc("bk_crm_contacts", {
@@ -494,7 +568,7 @@ function renderToday() {
       day: "numeric",
     }).format(now),
     '<button class="btn" data-refresh>Refresh</button>',
-  ) + summary(d.stats || {}) + healthPanel() +
+  ) + summary(d.stats || {}) + '<div id="morningList"></div>' + healthPanel() +
     `<div class="sections"><div>${
       section(
         "Next actions",
@@ -710,7 +784,7 @@ function projectForm(p = {}, create = false) {
     esc(p.delivery_target)
   }"></label><label>Location<input name="location" value="${
     esc(p.location)
-  }" maxlength="240"></label><label class="full">Project brief<textarea name="details" maxlength="12000" rows="3">${
+  }" maxlength="240"></label><label class="full">Project brief<textarea name="details" maxlength="4000" rows="3">${
     esc(p.details)
   }</textarea></label>${
     !create
@@ -881,9 +955,13 @@ function billingHtml(p, invoices) {
     invoices.map((i) =>
       `<div class="compact-row"><div><strong>${esc(i.title)}</strong><small>${
         i.due_date ? "Due " + esc(date(i.due_date)) : esc(i.kind || "Invoice")
-      }</small></div><div>${money(i.status === "paid" ? i.paid_amount_cents ?? i.amount_cents : i.amount_cents)} ${
-        pill(i.status, i.status)
-      }</div></div>`
+      }</small></div><div>${
+        money(
+          i.status === "paid"
+            ? i.paid_amount_cents ?? i.amount_cents
+            : i.amount_cents,
+        )
+      } ${pill(i.status, i.status)}</div></div>`
     ).join("")
   }</div><a class="btn small" href="../admin.html?p=${
     encodeURIComponent(p.id)
@@ -924,7 +1002,7 @@ function renderDetail() {
       !p.client_email
         ? '<p class="note">This lead has no email address yet. Call, text or use the saved Instagram handle, then add an email before emailing them.</p>'
         : ""
-    }<div class="detail-grid"><div>${
+    }<div id="clientExperience"></div><div class="detail-grid"><div>${
       section(
         "Project details",
         `<div class="detail-facts"><span>${
@@ -957,7 +1035,7 @@ function renderDetail() {
         "",
         "02",
       )
-    }${
+    }<div id="followupSettings"></div>${
       section(
         "Quotes",
         (d.quotes?.length ? quotesHtml(d.quotes) : empty(
@@ -1022,7 +1100,7 @@ function renderDetail() {
         "",
         "08",
       )
-    }</div></div>`;
+    }</div></div><div id="projectOperations"></div>`;
 }
 function renderReports() {
   const d = state.dashboard,
@@ -1085,7 +1163,7 @@ function renderReports() {
         "Marketing & revenue",
         '<p class="muted">Subscriber campaigns, outreach and the existing revenue summary remain in Growth. Campaign sends always require an explicit action.</p><a class="btn small" href="../growth.html">Open Growth ↗</a>',
       )
-    }<p class="note">HoneyBook payment information is accurate only when its invoices and payments have been recorded in the CRM. This workspace does not claim an automatic HoneyBook sync.</p></div></div>`;
+    }<p class="note">HoneyBook payment information is accurate only when its invoices and payments have been recorded in the CRM. This workspace does not claim an automatic HoneyBook sync.</p></div></div><div id="sourceReport"></div>`;
 }
 function getTask(id) {
   return [
@@ -1096,6 +1174,11 @@ function getTask(id) {
 }
 async function refreshContent() {
   state.dirty = false;
+  if (
+    extensionDirty.size &&
+    !confirm("Reload this project and discard other unsaved changes?")
+  ) return;
+  extensionDirty.clear();
   await load();
 }
 async function mutateButton(button, work) {
@@ -1255,7 +1338,11 @@ document.addEventListener("click", async (e) => {
     }
     return;
   }
-  if (b.matches("[data-retry],[data-refresh]")) {
+  if (b.matches("[data-capture-close]")) {
+    navigate("today");
+    return;
+  }
+  if (b.matches("[data-retry],[data-refresh],[data-extension-retry]")) {
     if (canLeave()) {
       state.dirty = false;
       load();
@@ -1466,7 +1553,10 @@ document.addEventListener("click", async (e) => {
   }
 });
 document.addEventListener("input", (e) => {
-  if (e.target.closest("form") && !e.target.closest("#searchForm,#loginForm")) {
+  if (
+    e.target.closest("form") &&
+    !e.target.closest("#searchForm,#loginForm,[data-crm-extension]")
+  ) {
     state.dirty = true;
   }
   if (e.target.closest("#quoteForm")) updateTotal($("#quoteForm"));
@@ -1691,7 +1781,7 @@ $("#logoutBtn").addEventListener("click", async () => {
   location.replace("/crm/");
 });
 window.addEventListener("beforeunload", (e) => {
-  if (state.dirty) {
+  if (state.dirty || extensionDirty.size) {
     e.preventDefault();
     e.returnValue = "";
   }
@@ -1708,16 +1798,26 @@ window.addEventListener("popstate", () => {
     return;
   }
   state.dirty = false;
+  extensionDirty.clear();
   readRoute();
   load();
 });
 function readRoute() {
   const q = new URLSearchParams(location.search);
-  state.view =
-    ["today", "pipeline", "clients", "reports"].includes(q.get("view"))
-      ? q.get("view")
-      : "today";
+  state.view = [
+      "today",
+      "pipeline",
+      "clients",
+      "reports",
+      "capacity",
+      "retainers",
+      "profit",
+      "capture",
+    ].includes(q.get("view"))
+    ? q.get("view")
+    : "today";
   state.project = q.get("p");
+  if (q.get("capture") === "1") state.view = "capture";
 }
 async function boot() {
   const { data, error } = await sb.auth.getSession();

@@ -3,6 +3,7 @@
   "specifiers": {
     "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/internal@^1.0.12": "1.0.14",
+    "npm:@supabase/supabase-js@2": "2.119.0",
     "npm:@supabase/supabase-js@2.119.0": "2.119.0",
     "npm:stripe@17.7.0": "17.7.0"
   },

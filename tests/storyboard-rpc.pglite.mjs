@@ -1,3 +1,4 @@
+// Client, project and venue details in this fixture are synthetic.
 import { fileURLToPath } from "node:url";
 // Real-Postgres test (PGlite, no Docker) for the storyboard migration: the note and review functions,
 // their locking and message rules, and that only the service role can call them.
@@ -40,7 +41,7 @@ await db.exec(readFileSync(`${root}supabase/migrations/20261026_bk_storyboard_re
 await db.exec(readFileSync(`${root}supabase/migrations/20261026_bk_storyboard_review.sql`, "utf8"));
 for (let i = 0; i < 2; i++) await db.exec(readFileSync(`${root}supabase/migrations/20261027_bk_storyboard_location.sql`, "utf8"));
 
-const [{ id: P }] = await q(`insert into bk_projects (title) values ('Delilah Amaro — Hide & Haunt Commercial') returning id`);
+const [{ id: P }] = await q(`insert into bk_projects (title) values ('Synthetic Video Client — Synthetic Campaign Commercial') returning id`);
 const board = async (title, { locked = false, outcome = null, frames = 3, at = "now()", pay = null } = {}) => {
   const [{ id }] = await q(`insert into bk_galleries (project_id, kind, title, locked, review_outcome, created_at, pay_url)
     values ($1, 'storyboard', $2, $3, $4, ${at}, $5) returning id`, [P, title, locked, outcome, pay]);
@@ -62,7 +63,7 @@ ok(/check/.test(await err(`update bk_galleries set pay_url = 'javascript:alert(1
 await q(`delete from bk_galleries where kind = 'storyboard'`);
 
 /* --- notes --- */
-const A = await board("Hide & Haunt storyboard v1", { pay: "https://taylormadecreative.hbportal.co/app/invoice/abc" });
+const A = await board("Synthetic Campaign storyboard v1", { pay: "https://taylormadecreative.hbportal.co/app/invoice/abc" });
 let [f1, f2, f3] = await items(A);
 let r = await note(f1.id, "  Make him look at the camera.\n ");
 ok(r.ok && r.note === "Make him look at the camera.", "note saves, trimmed");
@@ -81,7 +82,7 @@ ok((await q(`select count(*)::int as n from bk_messages`))[0].n === 0, "and post
 r = await submit(A, "changes", 1);
 ok(r.outcome === "changes" && r.notes === 1 && r.pay_url == null, "notes sent as changes (no deposit link)");
 let m = await lastMsg();
-ok(m.sender === "client" && m.body.startsWith('My notes on 1 frame of "Hide & Haunt storyboard v1":') && m.body.includes("1A · 0:01–0:02\nMake him look at the camera."), "Nelson gets each note with its frame: " + JSON.stringify(m.body));
+ok(m.sender === "client" && m.body.startsWith('My notes on 1 frame of "Synthetic Campaign storyboard v1":') && m.body.includes("1A · 0:01–0:02\nMake him look at the camera."), "Nelson gets each note with its frame: " + JSON.stringify(m.body));
 const g = (await q(`select locked, review_outcome, reviewed_at from bk_galleries where id = $1`, [A]))[0];
 ok(g.locked && g.review_outcome === "changes" && g.reviewed_at, "gallery locked with the outcome");
 ok(/already_submitted/.test(await err(`select bk_storyboard_submit($1, 'changes', 1)`, [A])), "a second send is refused");
@@ -89,7 +90,7 @@ ok(/locked/.test(await err(`select bk_storyboard_note($1, 'late')`, [f3.id])), "
 ok((await q(`select count(*)::int as n from bk_messages`))[0].n === 1, "exactly one message");
 
 /* --- round two: v2 is a draft, then goes live --- */
-const B = await board("Hide & Haunt storyboard v2", { locked: true, at: "now() + interval '1 minute'", pay: "https://taylormadecreative.hbportal.co/app/invoice/abc" });
+const B = await board("Synthetic Campaign storyboard v2", { locked: true, at: "now() + interval '1 minute'", pay: "https://taylormadecreative.hbportal.co/app/invoice/abc" });
 ok(!(await q(`select bk_storyboard_superseded($1) as s`, [A]))[0].s, "a draft v2 doesn't replace v1 yet");
 ok(/locked/.test(await err(`select bk_storyboard_note($1, 'hi')`, [(await items(B))[0].id])), "a draft takes no notes");
 await q(`update bk_galleries set locked = false where id = $1`, [B]);
@@ -102,7 +103,7 @@ await q(`update bk_galleries set locked = true, review_outcome = 'changes' where
 r = await submit(B, "approved", 0);
 ok(r.outcome === "approved" && r.pay_url === "https://taylormadecreative.hbportal.co/app/invoice/abc", "approve returns the deposit link");
 m = await lastMsg();
-ok(m.body === 'I approved the storyboard "Hide & Haunt storyboard v2" (3 frames).', "approve message in her voice: " + m.body);
+ok(m.body === 'I approved the storyboard "Synthetic Campaign storyboard v2" (3 frames).', "approve message in her voice: " + m.body);
 
 /* --- edges --- */
 const E = await board("Empty", { frames: 0, at: "now() + interval '2 minutes'" });
@@ -119,7 +120,7 @@ ok(/not_found/.test(await err(`select bk_storyboard_note($1, 'hi')`, [(await ite
 ok(/not_found/.test(await err(`select bk_storyboard_submit($1, null, null)`, [K])), "review only on storyboards");
 
 /* --- a location review: its own rounds, its own words, no deposit --- */
-const V = await board("Hide & Haunt location", { frames: 4, at: "now() + interval '5 minutes'", pay: "https://taylormadecreative.hbportal.co/app/invoice/abc" });
+const V = await board("Synthetic Campaign location", { frames: 4, at: "now() + interval '5 minutes'", pay: "https://taylormadecreative.hbportal.co/app/invoice/abc" });
 await q(`update bk_galleries set purpose = 'location' where id = $1`, [V]);
 ok(!(await q(`select bk_storyboard_superseded($1) as s`, [L]))[0].s, "a location doesn't make the latest storyboard an earlier round");
 ok(/check/.test(await err(`update bk_galleries set purpose = 'brochure' where id = $1`, [V])), "purpose is storyboard or location only");
@@ -127,14 +128,14 @@ const vItems = await items(V);
 await note(vItems[1].id, "Make the building bigger.");
 r = await submit(V, "changes", 1);
 m = await lastMsg();
-ok(r.outcome === "changes" && m.body.startsWith('My notes on 1 image of "Hide & Haunt location":'), "location notes say image: " + m.body.split("\n")[0]);
-const V2 = await board("Hide & Haunt location v2", { frames: 4, at: "now() + interval '6 minutes'", pay: "https://taylormadecreative.hbportal.co/app/invoice/abc" });
+ok(r.outcome === "changes" && m.body.startsWith('My notes on 1 image of "Synthetic Campaign location":'), "location notes say image: " + m.body.split("\n")[0]);
+const V2 = await board("Synthetic Campaign location v2", { frames: 4, at: "now() + interval '6 minutes'", pay: "https://taylormadecreative.hbportal.co/app/invoice/abc" });
 await q(`update bk_galleries set purpose = 'location' where id = $1`, [V2]);
 ok((await q(`select bk_storyboard_superseded($1) as s`, [V]))[0].s, "a newer location replaces the older location");
 r = await submit(V2, "approved", 0);
 m = await lastMsg();
 ok(r.outcome === "approved" && r.pay_url == null, "approving a location never leads to the deposit");
-ok(m.body === 'I approved the location "Hide & Haunt location v2" (4 images).', "location approve message: " + m.body);
+ok(m.body === 'I approved the location "Synthetic Campaign location v2" (4 images).', "location approve message: " + m.body);
 
 /* --- who can call them --- */
 for (const role of ["anon", "authenticated"]) {

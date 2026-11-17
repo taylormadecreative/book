@@ -1,0 +1,19 @@
+{
+  "name": "Taylormade Creative CRM",
+  "short_name": "Taylormade",
+  "id": "/crm/",
+  "start_url": "/crm/?capture=1",
+  "scope": "/crm/",
+  "display": "standalone",
+  "background_color": "#f5f2eb",
+  "theme_color": "#0b0b0d",
+  "icons": [
+    { "src": "../assets/img/inbox-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "../assets/img/inbox-512.png", "sizes": "512x512", "type": "image/png" }
+  ],
+  "share_target": {
+    "action": "/crm/?capture=1",
+    "method": "GET",
+    "params": { "title": "share_title", "text": "share_text", "url": "share_url" }
+  }
+}

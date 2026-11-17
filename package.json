@@ -8,9 +8,10 @@
     "test:unit": "deno test tests/*_test.js",
     "test:db": "node scripts/test-db.mjs",
     "test:e2e": "node scripts/test-e2e.mjs",
-    "test": "npm run check && npm run test:unit && npm run test:db && npm run test:edge && npm run test:e2e",
+    "test": "npm run check && npm run test:unit && npm run test:db && npm run test:edge && npm run test:media && npm run test:e2e",
     "dev": "python3 -m http.server 4173",
-    "test:edge": "deno check --node-modules-dir=none supabase/functions/bk-mailer/index.ts supabase/functions/bk-create-checkout/index.ts supabase/functions/bk-stripe-webhook/index.ts supabase/functions/bk-charge-balances/index.ts supabase/functions/bk-inbound-email/index.ts"
+    "test:edge": "deno check --node-modules-dir=none supabase/functions/bk-mailer/index.ts supabase/functions/bk-create-checkout/index.ts supabase/functions/bk-stripe-webhook/index.ts supabase/functions/bk-charge-balances/index.ts supabase/functions/bk-inbound-email/index.ts supabase/functions/bk-media/index.ts",
+    "test:media": "deno run --allow-env --import-map=tests/fixtures/bk-media-importmap.json tests/bk-media-held.deno.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.2.17",

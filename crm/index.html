@@ -13,7 +13,13 @@
       href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     >
-    <link rel="stylesheet" href="../css/crm-workspace.css?v=1">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="apple-touch-icon" href="../assets/img/inbox-apple-180.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="stylesheet" href="../css/crm-workspace.css?v=2">
+    <link rel="stylesheet" href="../css/crm-client-experience.css?v=1">
+    <link rel="stylesheet" href="../css/crm-operations.css?v=1">
+    <link rel="stylesheet" href="../css/crm-growth-tools.css?v=1">
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to workspace</a>
@@ -64,12 +70,16 @@
                 id="dueBadge"
                 hidden
               ></b></a>
+            <a href="?view=capture" data-view="capture">Capture</a>
             <a href="?view=pipeline" data-view="pipeline"><span
               >02</span>Pipeline</a>
             <a href="?view=clients" data-view="clients"><span
               >03</span>Clients</a>
             <a href="?view=reports" data-view="reports"><span
               >04</span>Reports</a>
+            <a href="?view=capacity" data-view="capacity">Editing workload</a>
+            <a href="?view=retainers" data-view="retainers">Monthly packages</a>
+            <a href="?view=profit" data-view="profit">Project earnings</a>
           </nav>
           <button class="btn primary" id="newLeadBtn">+ Add lead</button>
           <div class="sidebar-note">
@@ -94,6 +104,6 @@
       src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"
     ></script>
     <script src="../js/config.js"></script>
-    <script type="module" src="../js/crm-workspace.js?v=1"></script>
+    <script type="module" src="../js/crm-workspace.js?v=2"></script>
   </body>
 </html>

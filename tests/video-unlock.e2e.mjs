@@ -1,3 +1,4 @@
+// Client, project and venue details in this fixture are synthetic.
 import { fileURLToPath } from "node:url";
 // Stubbed UI test for a video held until its balance is paid (portal.html). Serves the repo locally;
 // every Supabase call is intercepted, so it never touches prod.
@@ -22,18 +23,18 @@ const ok = (cond, msg) => { checks++; if (!cond) { failures++; console.error("FA
 const done = async () => { try { await browser?.close(); } catch (_) {} srv.kill(); };
 
 /* ---------------- fixtures ---------------- */
-const NAME = "Delilah Amaro";
+const NAME = "Synthetic Video Client";
 const S = {
-  held: () => ({ file: "Hide & Haunt Commercial.mp4" }),
-  slow: () => ({ file: "Hide & Haunt Commercial.mp4", slow: true }),
-  gap: () => ({ file: "Hide & Haunt Commercial.mp4", slow: true, slowMs: 15000 }),
-  twice: () => ({ file: "Hide & Haunt Commercial.mp4", alreadyPaid: true }),
-  playing: () => ({ file: "Hide & Haunt Commercial.mp4" }),
-  nopreview: () => ({ file: "Hide & Haunt Commercial.mp4", noPreview: true }),
-  closed: () => ({ file: "Hide & Haunt Commercial.mp4", closed: true }),
-  closednostill: () => ({ file: "Hide & Haunt Commercial.mp4", closed: true, noStill: true }),
-  closedslow: () => ({ file: "Hide & Haunt Commercial.mp4", closed: true, slow: true, slowMs: 5000 }),
-  closing: () => ({ file: "Hide & Haunt Commercial.mp4" }),
+  held: () => ({ file: "Synthetic Campaign Commercial.mp4" }),
+  slow: () => ({ file: "Synthetic Campaign Commercial.mp4", slow: true }),
+  gap: () => ({ file: "Synthetic Campaign Commercial.mp4", slow: true, slowMs: 15000 }),
+  twice: () => ({ file: "Synthetic Campaign Commercial.mp4", alreadyPaid: true }),
+  playing: () => ({ file: "Synthetic Campaign Commercial.mp4" }),
+  nopreview: () => ({ file: "Synthetic Campaign Commercial.mp4", noPreview: true }),
+  closed: () => ({ file: "Synthetic Campaign Commercial.mp4", closed: true }),
+  closednostill: () => ({ file: "Synthetic Campaign Commercial.mp4", closed: true, noStill: true }),
+  closedslow: () => ({ file: "Synthetic Campaign Commercial.mp4", closed: true, slow: true, slowMs: 5000 }),
+  closing: () => ({ file: "Synthetic Campaign Commercial.mp4" }),
   evil: () => ({ file: "<img src=x onerror=window.pwned=1>.mp4" }),
 };
 const state = {};
@@ -44,10 +45,10 @@ const get = (pid) => {
   const f = S[key]();
   return (state[pid] = {
     ...f,
-    p: { id: pid, title: `${NAME} — Hide & Haunt Commercial`, status: "booked", service: "other", location: null,
+    p: { id: pid, title: `${NAME} — Synthetic Campaign Commercial`, status: "booked", service: "other", location: null,
       created_at: "2026-10-22T18:00:00Z", event_date: null, event_time: null, client_name: NAME },
     inv: [{ id: `inv-${key}`, kind: "balance", title: "Final balance", status: "sent", due_date: null, amount_cents: 75000, line_items: [] }],
-    msgs: [{ id: "m1", sender: "studio", created_at: "2026-10-29T22:00:00Z", body: "Your Hide & Haunt commercial is up." }],
+    msgs: [{ id: "m1", sender: "studio", created_at: "2026-10-29T22:00:00Z", body: "Your Synthetic Campaign commercial is up." }],
   });
 };
 // what bk-media sends: the preview and no download until the balance is paid, then the original
@@ -56,11 +57,11 @@ function galleries(s) {
   const paid = s.inv[0].status === "paid", inv = s.inv[0].id;
   const name = s.file;
   // her approved storyboard with its HoneyBook deposit link (paid before production)
-  const board = { id: "gsb", kind: "storyboard", title: "Hide & Haunt storyboard v3", locked: true, selection_limit: null, review_outcome: "approved",
+  const board = { id: "gsb", kind: "storyboard", title: "Synthetic Campaign storyboard v3", locked: true, selection_limit: null, review_outcome: "approved",
     reviewed_at: "2026-10-28T23:21:00Z", pay_url: "https://taylormadecreative.hbportal.co/flow/x", purpose: null,
     items: [{ id: "f1", gallery_id: "gsb", filename: "1A.png", sort: 1, selected: false, thumb_url: null, url: "https://img.test/full/1A.png", download_url: null,
       meta: { scene: 1, scene_title: "Arrival", code: "1A", tc: "0:00", action: "They walk up." }, client_note: null }] };
-  return [board, { id: "gv", kind: "video", title: "Hide & Haunt commercial", locked: false, selection_limit: null,
+  return [board, { id: "gv", kind: "video", title: "Synthetic Campaign commercial", locked: false, selection_limit: null,
     held: !paid, preview_closed: !paid && !!s.closed, unlock: { invoice_id: inv, title: "Final balance", amount_cents: 75000, paid, payable: s.inv[0].status === "sent" },
     items: [{ id: "v1", gallery_id: "gv", filename: name, size_bytes: 46855519, sort: 1, selected: false,
       thumb_url: !paid && s.closed && !s.noStill ? "https://img.test/full/preview/still.jpg" : null,
@@ -93,6 +94,8 @@ async function wire(page, errors) {
     const s = body.p_token === "tok" ? get(body.p_project) : null;
     if (!s) return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ message: "not_found" }) });
     if (fn === "bk_crm_portal_quotes") return route.fulfill({json:{rows:[]}});
+    if (fn === "bk_portal_preparation") return route.fulfill({json:{current:null,history:[]}});
+    if (["bk_portal_video_reviews", "bk_ops_portal_retainers"].includes(fn)) return route.fulfill({json:{rows:[]}});
     if (fn === "bk_crm_portal_billing") return route.fulfill({json:{billing_provider:"stripe",external_billing_url:null,paid_amounts:[]}});
     if (fn === "bk_portal") return route.fulfill({ json: { project: s.p, invoices: s.inv, contracts: [], files: [], messages: s.msgs } });
     return route.fulfill({ status: 404, json: {} });
@@ -141,7 +144,7 @@ async function heldChecks(page, label, inv = "inv-held") {
   ok(/nodownload/.test(await v.getAttribute("controlslist")), `${label}: controls without a download item`);
   ok((await v.getAttribute("disablepictureinpicture")) !== null, `${label}: no picture-in-picture`);
   ok(await v.evaluate((el) => !el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }))), `${label}: right-click menu blocked on the video`);
-  ok((await v.getAttribute("aria-label")) === "Watermarked preview: Hide & Haunt Commercial" || label === "evil", `${label}: the player has a name`);
+  ok((await v.getAttribute("aria-label")) === "Watermarked preview: Synthetic Campaign Commercial" || label === "evil", `${label}: the player has a name`);
   ok((await text(page, ".g-vtag")) === "Preview" && (await page.locator(".g-vtag.chip-due").count()) === 1, `${label}: Preview chip`);
   ok((await text(page, ".g-unlock .btn")) === "Pay $750.00 and download", `${label}: unlock button label`);
   ok((await page.locator(".g-unlock .btn").getAttribute("data-pay")) === inv, `${label}: unlock button pays the balance invoice`);
@@ -162,7 +165,7 @@ async function closedChecks(page, label, inv = "inv-closed") {
   ok(await page.locator(".g-vclosed-tag").evaluate((el) => el.tagName === "P" && !el.closest("button, a") && getComputedStyle(el).borderTopWidth === "0px" && getComputedStyle(el).backgroundColor === "rgba(0, 0, 0, 0)"), `${label}: the lock line is a label, not a capsule that looks tappable`);
   ok((await page.locator(".g-vclosed img").getAttribute("src") || "").endsWith("/still.jpg"), `${label}: the still sits behind the lock`);
   ok((await text(page, ".g-vtag")) === "Final cut", `${label}: chip names what it is`);
-  ok((await text(page, ".g-fn")) === "Hide & Haunt Commercial", `${label}: video name without .mp4`);
+  ok((await text(page, ".g-fn")) === "Synthetic Campaign Commercial", `${label}: video name without .mp4`);
   ok((await page.locator(".g-video .g-save, .g-video a[download], .g-video a[href*='download='], .g-dl").count()) === 0, `${label}: no download anywhere on the card`);
   const ask = await text(page, ".g-unlock-ask");
   ok(ask.startsWith("Your final cut is done.") && /final balance/.test(ask) && /full-quality/.test(ask) && !/as often as you like|closed/.test(ask) && !/\$/.test(ask), `${label}: closed copy: ` + ask);
@@ -183,7 +186,7 @@ try {
   await heldChecks(page, "desktop");
   ok((await page.locator(".sb-pay").count()) === 0 && !/Next is your deposit/.test(await page.locator("#galleryRoot").innerText()), "the approved storyboard no longer asks for the deposit once the video is here");
   ok(/Storyboard approved/.test(await page.locator("#galleryRoot").innerText()), "the storyboard still shows it was approved");
-  ok((await text(page, ".g-fn")) === "Hide & Haunt Commercial", "video name shown as a title, without .mp4");
+  ok((await text(page, ".g-fn")) === "Synthetic Campaign Commercial", "video name shown as a title, without .mp4");
   // the invoices tab lists the balance with its own Pay
   await page.click("#tab-invoices");
   ok(/Final balance/.test(await page.locator("#invoicesBlock, #panel-invoices").first().innerText()), "balance listed under Invoices");

@@ -24,11 +24,15 @@ try {
     create table bk_availability_rules(dow int,start_min int,end_min int,active bool default true);
     create table bk_blackouts(starts_on date,ends_on date);
     insert into bk_availability_rules select n,600,1080,true from generate_series(0,6)n;
+    alter table bk_galleries add title text default 'Synthetic gallery',add locked boolean default false,add unlock_invoice_id uuid,add preview_closed_at timestamptz;
+    alter table bk_gallery_items add created_at timestamptz default now(),add storage_path text,add filename text,add content_type text,add size_bytes bigint;
+    create schema storage;
+    create table storage.objects(bucket_id text,name text,updated_at timestamptz not null default now(),primary key(bucket_id,name));
   `);
   const paymentFixture=read('./fixtures/payment-schema.sql');
   await db.exec(paymentFixture.slice(paymentFixture.indexOf('CREATE OR REPLACE FUNCTION public.bk_open_slots_where')));
   const legacyQueue=await one(`insert into bk_email_queue(kind,attempts,last_error) values('nelson_alert',1,'Synthetic ambiguous previous attempt') returning id`);
-  for(const file of ['20261116192939_crm_foundation.sql','20261116193011_crm_payment_integrity.sql','20261116193012_crm_intake_retries.sql','20261116193952_crm_inbound_email.sql','20261116194013_crm_operational_health.sql']) await db.exec(read('../supabase/migrations/'+file));
+  for(const file of ['20261116192939_crm_foundation.sql','20261116193011_crm_payment_integrity.sql','20261116193012_crm_intake_retries.sql','20261116193952_crm_inbound_email.sql','20261116194013_crm_operational_health.sql','20261117033338_crm_client_preparation_review.sql','20261117033351_crm_studio_operations.sql','20261117033405_crm_followup_attribution.sql','20261117033508_crm_quick_capture.sql']) await db.exec(read('../supabase/migrations/'+file));
   // This trigger already exists in production; the migration replaces its function.
   await db.exec(`create trigger bk_invoice_paid after update on bk_invoices for each row when(new.status='paid' and old.status is distinct from 'paid') execute function bk_on_invoice_paid()`);
   const STAFF='11111111-1111-4111-8111-111111111111';
@@ -83,5 +87,21 @@ try {
   const health=await staff(()=>rpc('bk_crm_health'));
   check(health.email_failed>=1 && health.email_stalled>=1 && health.email_issues.some(i=>i.id===queue.id),'failed and stalled queued messages are visible to staff');
   await assert.rejects(as('anon',null,()=>rpc('bk_crm_health')));checks++;
-  console.log(`crm-integration.pglite: ${checks} checks passed (all 5 migrations, synthetic records only)`);
+  const captured = await staff(() => rpc('bk_crm_capture_lead', [{
+    request_id:'cccccccc-3333-4333-8333-333333333333',client_name:'Synthetic Shared Lead',
+    instagram:'synthetic_studio',referral_source:'IG',service:'brand_content',
+    details:'Synthetic captured inquiry',next_action:'Discuss the brief',next_due_at:'2099-01-02T15:00:00Z',
+  }]));
+  const settings = await staff(() => rpc('bk_crm_followup_settings', [captured.id]));
+  check(settings.enabled && new Date(settings.next_due_at).toISOString()==='2099-01-02T15:00:00.000Z', 'capture keeps its selected follow-up time in the cadence');
+  check((await one('select source_normalized from bk_lead_attribution where project_id=$1',[captured.id])).source_normalized==='Instagram', 'capture participates in normalized acquisition reporting');
+  const experience = await staff(() => rpc('bk_crm_client_experience',[captured.id]));
+  let preparation = await staff(() => rpc('bk_crm_prep_save',[captured.id,{...experience.prep_defaults,request_id:'dddddddd-4444-4444-8444-444444444444'}]));
+  preparation = await staff(() => rpc('bk_crm_prep_publish',[preparation.id,preparation.version]));
+  const answers = Object.fromEntries(preparation.questions.map(question => [question.id, question.type==='check' ? true : question.type==='choice' ? question.options[0] : question.type==='date' ? '2099-01-02' : 'Synthetic project answer']));
+  await as('anon',null,()=>rpc('bk_portal_prep_save',[captured.id,captured.access_token,preparation.id,preparation.version,0,answers,true]));
+  check((await staff(()=>rpc('bk_crm_followup_settings',[captured.id]))).state==='client_replied','a submitted client preparation pauses the sales cadence');
+  check((await one("select count(*)::int n from bk_tasks where project_id=$1 and automation_key like 'prep_review_%' and status='open'",[captured.id])).n===1,'portal checklist joins the normal staff task workflow');
+  check((await staff(()=>rpc('bk_ops_project',[captured.id]))).profit.rows[0].received_cents===0,'captured lead has no invented earnings');
+  console.log(`crm-integration.pglite: ${checks} checks passed (all 9 CRM migrations, synthetic records only)`);
 } finally { await db.close(); }

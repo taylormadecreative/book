@@ -1,3 +1,4 @@
+// Client, project and venue details in this fixture are synthetic.
 import { fileURLToPath } from "node:url";
 // Stubbed UI test for the admin proofing picks view. Serves the repo locally; every Supabase call is intercepted — never touches prod.
 // Run: node tests/admin-picks.e2e.mjs
@@ -10,23 +11,23 @@ await new Promise((r) => setTimeout(r, 900));
 let browser;
 const fail = async (m) => { console.error("FAIL:", m); try { await browser?.close(); } catch (_) {} srv.kill(); process.exit(1); };
 
-const PID = "4610c6e8-1d05-4da1-a23d-a917ad51d7db", GID = "58480024-3d4a-4880-97d2-ac82a77a9143";
+const PID = "00000000-0000-4000-8000-000000000004", GID = "00000000-0000-4000-8000-000000000005";
 const EVIL = "<img src=x onerror=window.pwned=1>.jpg";
 const now = new Date().toISOString();
-// 411 proofs like the H+S gallery; picks are scattered and inserted out of order so the list must sort by frame
+// 411 synthetic proofs in a large gallery; picks are scattered and inserted out of order so the list must sort by frame
 const PICKED = [402, 7, 150, 151, 33, 260, 300, 88, 377, 199];
 const items = Array.from({ length: 411 }, (_, i) => {
-  const name = i === 199 ? EVIL : i === 88 ? "Hoodies and stripes vanderbilt shoot6123 1.jpg" : `DSC0${4000 + i}.jpg`;
-  return { id: `item-${i}`, gallery_id: GID, project_id: PID, storage_path: `${PID}/${GID}/0f8fad5b-d9cb-469f-a165-70867728950e-${name.replace(/[^a-zA-Z0-9._-]/g, "_")}`,
+  const name = i === 199 ? EVIL : i === 88 ? "Synthetic apparel shoot6123 1.jpg" : `DSC0${4000 + i}.jpg`;
+  return { id: `item-${i}`, gallery_id: GID, project_id: PID, storage_path: `${PID}/${GID}/00000000-0000-4000-8000-000000000001-${name.replace(/[^a-zA-Z0-9._-]/g, "_")}`,
     filename: name, content_type: "image/jpeg", size_bytes: 180000, sort: i + 1, created_at: now, selected: PICKED.includes(i) };
 });
-const proj = (id, title, galleries) => ({ id, title, client_name: "Buck", client_email: "n@x.com", client_phone: null, company: "Hoodies+Stripes",
+const proj = (id, title, galleries) => ({ id, title, client_name: "Synthetic Customer", client_email: "staff@example.test", client_phone: null, company: "Synthetic Apparel Company",
   service: "photography", status: "in_production", event_date: "2026-10-04", event_time: null, location: null, budget_range: null, details: "",
   notes_internal: "", access_token: "tok", created_at: now, updated_at: now,
   bk_invoices: [], bk_messages: [], bk_files: [], bk_galleries: galleries });
 const PROJECTS = [
-  proj(PID, "Hoodies+Stripes — Vanderbilt Collection Shoot", [
-    { id: GID, project_id: PID, kind: "proof", title: "Vanderbilt Collection — Oct 4", selection_limit: 10, locked: true, created_at: now, bk_gallery_items: items },
+  proj(PID, "Synthetic Apparel Company — Synthetic Collection Shoot", [
+    { id: GID, project_id: PID, kind: "proof", title: "Synthetic Collection — Oct 4", selection_limit: 10, locked: true, created_at: now, bk_gallery_items: items },
     { id: "g-final", project_id: PID, kind: "final", title: "Edited photos", selection_limit: null, locked: false, created_at: "2026-10-12T00:00:00Z",
       bk_gallery_items: [{ id: "f1", gallery_id: "g-final", project_id: PID, storage_path: `${PID}/g-final/x-EDIT1.jpg`, filename: "EDIT1.jpg", sort: 1, created_at: now, selected: false }] },
   ]),
@@ -45,7 +46,7 @@ const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { widt
 await ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://localhost:18741" });
 await ctx.addInitScript(() => {
   const s = { access_token: "t", refresh_token: "r", expires_at: Math.floor(Date.now() / 1000) + 3600, expires_in: 3600, token_type: "bearer",
-    user: { id: "u1", email: "n@x.com", aud: "authenticated", role: "authenticated" } };
+    user: { id: "u1", email: "staff@example.test", aud: "authenticated", role: "authenticated" } };
   localStorage.setItem("sb-pgqdmnmessbbzyszjfvr-auth-token", JSON.stringify(s));
 });
 await ctx.route("**/pgqdmnmessbbzyszjfvr.supabase.co/**", async (route) => {
@@ -65,7 +66,7 @@ await ctx.route("**/pgqdmnmessbbzyszjfvr.supabase.co/**", async (route) => {
     const path = decodeURIComponent(url.split("/object/sign/project-media/")[1].split("?")[0]);
     return ok({ signedURL: `/object/sign/project-media/${encodeURIComponent(path)}?token=full` });
   }
-  if (url.includes("/auth/v1/")) return ok({ id: "u1", email: "n@x.com", aud: "authenticated", role: "authenticated" });
+  if (url.includes("/auth/v1/")) return ok({ id: "u1", email: "staff@example.test", aud: "authenticated", role: "authenticated" });
   return ok([]);
 });
 // supabase-js prefixes signed URLs with the storage base: send /storage/v1/fake-img/… back through the stub
