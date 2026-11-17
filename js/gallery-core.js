@@ -428,6 +428,13 @@
       g.items.forEach((it) => {
         const card = document.createElement("div");
         card.className = "g-video";
+        // Review controls attach to this existing, entitlement-filtered player.
+        // They never request or construct a clean media URL of their own.
+        card.dataset.itemId = it.id;
+        card.dataset.galleryId = g.id;
+        card.dataset.mediaScope = g.held ? "preview" : "clean";
+        card.dataset.mediaRevision = it.media_revision || "";
+        card.dataset.assetKey = it.asset_key || "";
         if (g.held) {
           // the watermarked preview: watch only until the balance is paid (the server sends no original and no download)
           card.classList.add("is-held");

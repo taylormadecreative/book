@@ -37,6 +37,7 @@ jobs:
       - run: npm run test:unit
       - run: npm run test:db
       - run: npm run test:edge
+      - run: npm run test:media
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
   deploy:

@@ -1,0 +1,342 @@
+.ce-section {
+  border-top: 1px solid var(--line, #ddd7cc);
+  padding: 24px 0;
+  color: var(--paper-ink, var(--ink, #242321));
+  font-family: "Familjen Grotesk", sans-serif;
+  line-height: 1.5;
+}
+.ce-section:first-child {
+  margin-top: 8px;
+}
+.ce-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.ce-heading h3,
+.ce-heading h4,
+.ce-section h4 {
+  font-size: 1.2rem;
+  line-height: 1.25;
+  margin: 0 0 5px;
+  font-weight: 700;
+}
+.ce-heading p,
+.ce-muted {
+  color: var(--paper-muted, var(--muted, #68645e));
+  font-size: 0.9rem;
+  margin: 5px 0 12px;
+}
+.ce-form {
+  display: grid;
+  gap: 14px;
+  margin: 16px 0 24px;
+  max-width: 74ch;
+}
+.ce-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+  min-width: 0;
+}
+.ce-form input:not([type="checkbox"]),
+.ce-form textarea,
+.ce-form select {
+  font: inherit;
+  color: inherit;
+  background: var(--card, #fbf9f5);
+  border: 1px solid var(--line, #cfc8ba);
+  border-radius: 7px;
+  padding: 10px 12px;
+  min-height: 44px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.ce-form textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+.ce-form input:focus-visible,
+.ce-form textarea:focus-visible,
+.ce-form select:focus-visible,
+.ce-link:focus-visible,
+.ce-time:focus-visible {
+  outline: 2px solid var(--gold, #c99733);
+  outline-offset: 3px;
+}
+.ce-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.ce-inline {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.ce-inline h4 {
+  margin: 0;
+}
+.ce-question {
+  border: 0;
+  border-top: 1px solid var(--line, #ddd7cc);
+  padding: 15px 0;
+  margin: 0;
+  min-width: 0;
+}
+.ce-question legend {
+  padding-right: 12px;
+  font-size: 0.8rem;
+  color: var(--paper-muted, var(--muted, #68645e));
+}
+.ce-question .ce-inline {
+  margin-top: 10px;
+}
+.ce-question .ce-inline > label:first-child {
+  flex: 1;
+  min-width: 150px;
+}
+.ce-check {
+  display: flex !important;
+  align-items: start;
+  gap: 9px;
+  font-weight: 500 !important;
+}
+.ce-check input {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  margin-top: 2px;
+  accent-color: var(--gold, #c99733);
+}
+.ce-check span {
+  max-width: 68ch;
+}
+.ce-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.ce-actions button {
+  min-height: 44px;
+}
+.ce-link {
+  border: 0;
+  background: transparent;
+  padding: 8px 0;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 40px;
+}
+.ce-link:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.ce-status {
+  display: inline-block;
+  border: 1px solid var(--line, #cfc8ba);
+  border-radius: 5px;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.ce-answers {
+  margin: 18px 0;
+}
+.ce-answers > div {
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line, #e1dbd0);
+}
+.ce-answers dt {
+  font-weight: 600;
+}
+.ce-answers dd {
+  margin: 5px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--paper-muted, var(--muted, #68645e));
+  max-width: 72ch;
+}
+.ce-history {
+  border-top: 1px solid var(--line, #ddd7cc);
+  padding: 13px 0;
+}
+.ce-history summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 32px;
+  overflow-wrap: anywhere;
+}
+.ce-notes {
+  padding: 0;
+  list-style: none;
+}
+.ce-notes li {
+  border-bottom: 1px solid var(--line, #e1dbd0);
+  padding: 13px 0;
+}
+.ce-notes p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 7px 0;
+}
+.ce-notes code {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.85rem;
+}
+.ce-error {
+  padding: 12px 14px;
+  border: 1px solid #ba7366;
+  background: #f9eae4;
+  border-radius: 7px;
+  color: #762c21;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.ce-required {
+  font-size: 0.72rem;
+  color: var(--paper-muted, var(--muted, #68645e));
+  font-weight: 500;
+  margin-left: 8px;
+}
+.ce-copy {
+  max-width: 72ch;
+  white-space: pre-wrap;
+}
+.ce-progress {
+  font-size: 0.85rem;
+  color: var(--paper-muted, var(--muted, #68645e));
+}
+.ce-feedback {
+  background: var(--card, #fbf9f5);
+  padding: 14px;
+  border: 1px solid var(--line, #ddd7cc);
+  border-radius: 7px;
+  white-space: pre-wrap;
+}
+.ce-saved {
+  color: #31694a;
+  font-weight: 600;
+}
+.ce-video-review {
+  border-top: 1px solid var(--line, #ddd7cc);
+  padding: 16px;
+}
+.ce-video-review .ce-heading {
+  margin-bottom: 10px;
+}
+.ce-video-review h3 {
+  font-size: 1.05rem;
+}
+.ce-time {
+  border: 0;
+  background: transparent;
+  padding: 5px 0;
+  font:
+    600 0.85rem "IBM Plex Mono",
+    monospace;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.ce-video-review [data-video-status] {
+  font-size: 0.85rem;
+}
+.ce-video-review .ce-form {
+  margin-bottom: 12px;
+}
+.ce-review-decision {
+  border-top: 1px solid var(--line, #ddd7cc);
+  padding-top: 15px;
+}
+.ce-review-decision > label {
+  margin-bottom: 12px;
+}
+.ce-note-compose {
+  padding-top: 10px;
+}
+.ce-note-editor {
+  padding: 12px 0;
+}
+.ce-video-note-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ce-video-review button[disabled] {
+  cursor: default;
+  opacity: 0.6;
+}
+@media (max-width: 600px) {
+  .ce-heading {
+    display: block;
+  }
+  .ce-heading > .btn,
+  .ce-heading > .ce-link {
+    margin-top: 9px;
+  }
+  .ce-fields {
+    grid-template-columns: 1fr;
+  }
+  .ce-actions {
+    align-items: stretch;
+  }
+  .ce-actions .btn {
+    flex: 1;
+    min-width: 130px;
+  }
+  .ce-video-review {
+    padding: 14px 10px;
+  }
+  .ce-section {
+    padding: 20px 0;
+  }
+  .ce-form input,
+  .ce-form textarea,
+  .ce-form select {
+    font-size: 16px;
+  }
+}
+
+.ce-section .btn {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 44px;
+  border: 1px solid var(--paper-ink, var(--ink, #242321));
+  border-radius: 8px;
+  padding: 10px 15px;
+  font:
+    600 0.9rem "Familjen Grotesk",
+    sans-serif;
+  cursor: pointer;
+  text-decoration: none;
+  background: transparent;
+  color: var(--paper-ink, var(--ink, #242321));
+}
+.ce-section .btn-gold {
+  background: var(--gold, #d7ab48);
+  border-color: var(--gold, #d7ab48);
+  color: #242321;
+}
+.ce-section .btn-ghost {
+  background: transparent;
+}
+.ce-section .btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.ce-section .btn:focus-visible {
+  outline: 2px solid var(--gold, #c99733);
+  outline-offset: 3px;
+}

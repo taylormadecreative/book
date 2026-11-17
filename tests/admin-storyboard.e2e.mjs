@@ -1,3 +1,4 @@
+// Client, project and venue details in this fixture are synthetic.
 import { fileURLToPath } from "node:url";
 // Stubbed UI test for storyboards in admin: a draft the client can't see, Send to client, the deposit
 // link approving leads to, client notes, Reopen only on the latest round. Every Supabase call is intercepted.
@@ -11,7 +12,7 @@ await new Promise((r) => setTimeout(r, 900));
 let browser, failures = 0, checks = 0;
 const ok = (cond, msg) => { checks++; if (!cond) { failures++; console.error("FAIL:", msg); } };
 
-const PID = "b4c7708b-ea4d-433f-9349-44728eccb801";
+const PID = "00000000-0000-4000-8000-000000000009";
 const now = new Date().toISOString();
 const frames = (gid, n, notes = {}) => Array.from({ length: n }, (_, i) => {
   const code = `${Math.floor(i / 3) + 1}${"ABC"[i % 3]}`;
@@ -19,17 +20,17 @@ const frames = (gid, n, notes = {}) => Array.from({ length: n }, (_, i) => {
     content_type: "image/jpeg", size_bytes: 300000, sort: i + 1, created_at: now, selected: false,
     meta: { code, tc: `0:0${i % 10}–0:1${i % 10}` }, client_note: notes[code] || null };
 });
-const gal = (id, extra) => ({ id, project_id: PID, kind: "storyboard", title: "Hide & Haunt storyboard", selection_limit: null, locked: false,
+const gal = (id, extra) => ({ id, project_id: PID, kind: "storyboard", title: "Synthetic Campaign storyboard", selection_limit: null, locked: false,
   review_outcome: null, reviewed_at: null, pay_url: null, created_at: now, bk_gallery_items: [], ...extra });
 let GALS = [
-  gal("g-v1", { title: "Hide & Haunt storyboard v1", locked: true, review_outcome: "changes", reviewed_at: now, created_at: "2026-10-26T10:00:00Z",
+  gal("g-v1", { title: "Synthetic Campaign storyboard v1", locked: true, review_outcome: "changes", reviewed_at: now, created_at: "2026-10-26T10:00:00Z",
     bk_gallery_items: frames("g-v1", 6, { "1C": "Make him look right at the camera.", "2B": "<b>bolder</b> mask" }) }),
-  gal("g-v2", { title: "Hide & Haunt storyboard v2", locked: true, created_at: "2026-10-27T10:00:00Z", bk_gallery_items: frames("g-v2", 6) }),
+  gal("g-v2", { title: "Synthetic Campaign storyboard v2", locked: true, created_at: "2026-10-27T10:00:00Z", bk_gallery_items: frames("g-v2", 6) }),
   // a location review, already sent back with a note: its own rounds, no deposit link
-  gal("g-loc", { title: "Hide & Haunt location", purpose: "location", locked: true, review_outcome: "changes", reviewed_at: now, created_at: "2026-10-27T11:00:00Z",
+  gal("g-loc", { title: "Synthetic Campaign location", purpose: "location", locked: true, review_outcome: "changes", reviewed_at: now, created_at: "2026-10-27T11:00:00Z",
     bk_gallery_items: frames("g-loc", 4, { "1B": "Make the building bigger." }) }),
 ];
-const PROJECTS = () => [{ id: PID, title: "Delilah Amaro — Hide & Haunt Commercial", client_name: "Delilah Amaro", client_email: "d@x.com", client_phone: null,
+const PROJECTS = () => [{ id: PID, title: "Synthetic Video Client — Synthetic Campaign Commercial", client_name: "Synthetic Video Client", client_email: "client@example.test", client_phone: null,
   company: null, service: "other", status: "booked", event_date: null, event_time: null, location: null, budget_range: null, details: "",
   notes_internal: "", access_token: "tok", created_at: now, updated_at: now, bk_invoices: [], bk_messages: [], bk_files: [], bk_galleries: GALS }];
 const patches = [], inserts = [];
@@ -38,7 +39,7 @@ browser = await chromium.launch(process.env.PW_CHROME ? { executablePath: "/Appl
 const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1440, height: 900 } });
 await ctx.addInitScript(() => {
   const s = { access_token: "t", refresh_token: "r", expires_at: Math.floor(Date.now() / 1000) + 3600, expires_in: 3600, token_type: "bearer",
-    user: { id: "u1", email: "n@x.com", aud: "authenticated", role: "authenticated" } };
+    user: { id: "u1", email: "staff@example.test", aud: "authenticated", role: "authenticated" } };
   localStorage.setItem("sb-pgqdmnmessbbzyszjfvr-auth-token", JSON.stringify(s));
 });
 const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#3a3f47"/></svg>`;
@@ -62,7 +63,7 @@ await ctx.route("**/pgqdmnmessbbzyszjfvr.supabase.co/**", async (route) => {
     const { paths } = JSON.parse(req.postData() || "{}");
     return json(paths.map((path) => ({ path, signedURL: `/fake-img/${encodeURIComponent(path)}?token=x`, error: null })));
   }
-  if (url.includes("/auth/v1/")) return json({ id: "u1", email: "n@x.com", aud: "authenticated", role: "authenticated" });
+  if (url.includes("/auth/v1/")) return json({ id: "u1", email: "staff@example.test", aud: "authenticated", role: "authenticated" });
   return json([]);
 });
 await ctx.route("**/storage/v1/fake-img/**", (route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: SVG }));
@@ -87,7 +88,7 @@ try {
   // v2: a draft
   ok(/Draft · 6 frames · client can't see it/.test(await card("g-v2").locator(".pill").textContent()), "v2 shows as a draft");
   ok((await card("g-v2").locator("[data-lock]").textContent()) === "Send to client", "a draft offers Send to client");
-  await page.locator(".ga").first().screenshot({ path: "/private/tmp/claude-501/-Users-nelsontaylor/67f392f8-6a23-41d6-9dab-7fce3fea8741/scratchpad/sbshots/admin-v1.png" }).catch(() => {});
+  await page.locator(".ga").first().screenshot({ path: "/private/tmp/claude-501/-Users-nelsontaylor/00000000-0000-4000-8000-000000000007/scratchpad/sbshots/admin-v1.png" }).catch(() => {});
 
   // deposit link: refused unless https, saved when it is
   const inp = page.locator('[data-payurl="g-v2"]');
@@ -112,7 +113,7 @@ try {
   ok((await page.inputValue('[data-payurl="g-v2"]')) === "https://taylormadecreative.hbportal.co/app/invoice/abc123", "deposit link shows after the refresh");
 
   // the location card: labeled Location, no deposit link, Reopen on its own latest round
-  const locCard = page.locator(".ga", { has: page.locator("text=Hide & Haunt location") });
+  const locCard = page.locator(".ga", { has: page.locator("text=Synthetic Campaign location") });
   ok((await locCard.locator(".ga-head .hud").first().textContent()) === "Location", "location card is labeled Location");
   ok(!(await locCard.locator("[data-payurl]").count()), "a location has no deposit link field");
   ok((await locCard.locator("[data-lock]").textContent()) === "Reopen for review", "the location can reopen (its own latest round)");
@@ -129,7 +130,7 @@ try {
 
   // a new storyboard starts as a draft
   await page.selectOption("#galKind", "storyboard");
-  await page.fill("#galTitle", "Hide & Haunt storyboard v3");
+  await page.fill("#galTitle", "Synthetic Campaign storyboard v3");
   await page.click("#galCreate");
   await page.waitForTimeout(400);
   ok(inserts.length === 1 && inserts[0].kind === "storyboard" && inserts[0].locked === true, "a new storyboard is created as a draft");

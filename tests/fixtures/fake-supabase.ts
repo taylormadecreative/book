@@ -5,10 +5,12 @@ export const fake = {
   objects: new Set<string>(),
   signed: [] as string[], // every storage path anyone asked to sign
   failTable: null as string | null,
+  failBindings: false,
   reset(tables: Record<string, Row[]>, objects: string[]) {
     this.tables = structuredClone(tables);
     this.objects = new Set(objects);
     this.signed.length = 0;
+    this.failBindings = false;
   },
 };
 const signedUrl = (path: string, download?: string) =>
@@ -34,7 +36,13 @@ function query(table: string) {
 export function createClient(_url: string, _key: string) {
   return {
     from: (t: string) => query(t),
-    rpc: async () => ({ data: null, error: { message: "not_in_fake" } }),
+    rpc: async (name: string, args: any) => name === "bk_crm_media_bindings" && !fake.failBindings
+      ? { data: { rows: (fake.tables.bk_gallery_items || []).filter((i) => args.p_projects.includes(i.project_id)).map((i) => ({
+        id: i.id, media_revision: i.media_revision || "synthetic-revision",
+        preview_key: fake.objects.has(i.storage_path.replace(/([^/]+)$/, "preview/$1")) ? "opaque-preview-key" : null,
+        clean_key: fake.objects.has(i.storage_path) ? "opaque-clean-key" : null,
+      })) }, error: null }
+      : { data: null, error: { message: "not_in_fake" } },
     auth: {
       getUser: async (jwt: string) => ({ data: { user: jwt === "aaa.staff.jwt" ? { id: "staff-uid", email: "nelson@x.test" } : null } }),
     },

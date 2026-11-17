@@ -995,12 +995,16 @@ td .row-title:hover {
   }
   .sidebar nav {
     display: flex;
-    gap: 0;
+    gap: 6px;
     flex: 1;
+    min-width: 0;
+    overflow-x: auto;
     margin: 0;
-    justify-content: space-between;
+    justify-content: flex-start;
   }
   .sidebar nav a {
+    flex: 0 0 auto;
+    white-space: nowrap;
     padding: 8px 7px;
     font-size: 16px;
     gap: 5px;
@@ -1172,6 +1176,13 @@ td .row-title:hover {
     font-size: 14px;
   }
 }
+
+.quick-capture { max-width: 920px; }
+.capture-install { margin-top: 24px; }
+.capture-install summary { cursor: pointer; font-weight: 600; }
+.capture-install p { margin: 12px 0 0; color: var(--paper-muted); }
+[data-crm-extension] { min-width: 0; }
+[data-crm-extension] input, [data-crm-extension] select, [data-crm-extension] textarea { max-width: 100%; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     transition: none !important;

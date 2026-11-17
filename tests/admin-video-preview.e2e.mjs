@@ -1,3 +1,4 @@
+// Client, project and venue details in this fixture are synthetic.
 import { fileURLToPath } from "node:url";
 // Stubbed UI test for the admin Close preview / Reopen preview button on a held video. Serves the repo
 // locally; every Supabase call is intercepted, so it never touches prod.
@@ -12,13 +13,13 @@ await new Promise((r) => setTimeout(r, 900));
 let browser, failures = 0, checks = 0;
 const ok = (cond, msg) => { checks++; if (!cond) { failures++; console.error("FAIL:", msg); } };
 
-const PID = "b4c7708b-0000-4000-8000-000000000001", GID = "590580de-0000-4000-8000-000000000002", INV = "2b356fa5-0000-4000-8000-000000000003";
+const PID = "00000000-0000-4000-8000-000000000008", GID = "00000000-0000-4000-8000-000000000006", INV = "00000000-0000-4000-8000-000000000003";
 const now = new Date().toISOString();
-const gal = { id: GID, project_id: PID, kind: "video", title: "Hide & Haunt commercial", selection_limit: null, locked: false, created_at: now,
+const gal = { id: GID, project_id: PID, kind: "video", title: "Synthetic Campaign commercial", selection_limit: null, locked: false, created_at: now,
   unlock_invoice_id: INV, preview_closed_at: null,
-  bk_gallery_items: [{ id: "v1", gallery_id: GID, project_id: PID, storage_path: `${PID}/${GID}/x-hide-and-haunt-commercial.mp4`, filename: "Hide & Haunt Commercial.mp4", sort: 1, created_at: now, selected: false }] };
+  bk_gallery_items: [{ id: "v1", gallery_id: GID, project_id: PID, storage_path: `${PID}/${GID}/x-synthetic-campaign-commercial.mp4`, filename: "Synthetic Campaign Commercial.mp4", sort: 1, created_at: now, selected: false }] };
 const inv = { id: INV, project_id: PID, title: "Final balance", kind: "custom", status: "sent", amount_cents: 75000, line_items: [], created_at: now };
-const project = { id: PID, title: "Delilah Amaro — Hide & Haunt Commercial", client_name: "Delilah Amaro", client_email: "d@x.test", client_phone: null, company: null,
+const project = { id: PID, title: "Synthetic Video Client — Synthetic Campaign Commercial", client_name: "Synthetic Video Client", client_email: "client@example.test", client_phone: null, company: null,
   service: "other", status: "in_production", event_date: null, event_time: null, location: null, budget_range: null, details: "",
   notes_internal: "", access_token: "tok", created_at: now, updated_at: now, bk_invoices: [inv], bk_messages: [], bk_files: [], bk_galleries: [gal] };
 const patches = [];
@@ -29,7 +30,7 @@ try {
   const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1440, height: 900 } });
   await ctx.addInitScript(() => {
     const s = { access_token: "t", refresh_token: "r", expires_at: Math.floor(Date.now() / 1000) + 3600, expires_in: 3600, token_type: "bearer",
-      user: { id: "u1", email: "n@x.com", aud: "authenticated", role: "authenticated" } };
+      user: { id: "u1", email: "staff@example.test", aud: "authenticated", role: "authenticated" } };
     localStorage.setItem("sb-pgqdmnmessbbzyszjfvr-auth-token", JSON.stringify(s));
   });
   await ctx.route("**/pgqdmnmessbbzyszjfvr.supabase.co/**", async (route) => {
@@ -43,7 +44,7 @@ try {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ id: GID }]) });
     }
     if (url.includes("/rest/v1/bk_projects")) return json([project]);
-    if (url.includes("/auth/v1/")) return json({ id: "u1", email: "n@x.com", aud: "authenticated", role: "authenticated" });
+    if (url.includes("/auth/v1/")) return json({ id: "u1", email: "staff@example.test", aud: "authenticated", role: "authenticated" });
     return json([]);
   });
   const page = await ctx.newPage();

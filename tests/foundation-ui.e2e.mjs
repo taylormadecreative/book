@@ -47,6 +47,8 @@ try {
       const json=(v,status=200)=>r.fulfill({status,contentType:'application/json',body:JSON.stringify(v)});
       if(u.endsWith('/bk_portal'))return json({project,invoices:[],messages:[],contracts:[],files:[]});
       if(u.endsWith('/bk_extra_edit_cents'))return json(0);
+      if(u.endsWith('/bk_portal_preparation'))return json({current:null,history:[]});
+      if(['/bk_portal_video_reviews','/bk_ops_portal_retainers'].some(path=>u.endsWith(path)))return json({rows:[]});
       if(u.endsWith('/bk_crm_portal_billing'))return json({billing_provider:'unassigned',external_billing_url:null});
       if(u.endsWith('/bk_crm_portal_quotes'))return json({rows:[{id:'quote-1',version:'version-1',title:'Sample <img src=x onerror=window.pwned=1> quote',status:accepted?'accepted':'sent',lines:[{description:'Studio session',quantity:1,unit_cents:25000}],total_cents:25000,notes:'One session, three edited images.',accepted_by:accepted?'Sample Signer':null,accepted_at:accepted?new Date().toISOString():null}]});
       if(u.endsWith('/bk_crm_accept_quote')) { calls.push(b);if(++attempts===1)return json({message:'Synthetic offline failure'},500);accepted=true;return json({ok:true,status:'accepted'}); }

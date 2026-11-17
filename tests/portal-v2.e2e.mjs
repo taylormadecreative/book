@@ -1,3 +1,4 @@
+// Client, project and venue details in this fixture are synthetic.
 import { fileURLToPath } from "node:url";
 // Stubbed UI test for the client portal (portal.html, 2026-10-21 look). Serves the repo locally;
 // every Supabase call is intercepted, so it never touches prod.
@@ -22,7 +23,7 @@ const done = async () => { try { await browser?.close(); } catch (_) {} srv.kill
 
 /* ---------------- fixtures ---------------- */
 const now = "2026-10-20T19:26:11Z";
-const NAME = "Dave Ladetto";
+const NAME = "Synthetic Customer";
 const proofNums = [6696, 6697, 6700, 6701, 6703, 6707, 6711, 6715, 6719, 6722, 6723, 6727, 6731, 6735, 6739, 6741, 6743, 6747];
 const proofs = (gid, picked = []) => proofNums.map((n, i) => ({
   id: `${gid}-${n}`, gallery_id: gid, filename: `Untitled Session${n}.jpg`, size_bytes: 310874, sort: i + 1,
@@ -37,11 +38,11 @@ function urls(file, dl, big) {
     download_url: `https://img.test/full/${file}?download=${encodeURIComponent(dl)}` };
 }
 const project = (id, extra) => ({ id, title: `${NAME} — Headshots`, status: "delivered", service: "photography",
-  location: "1623 Main St, Unit 207, Dallas, TX 75201", created_at: "2026-10-09T18:58:17Z", event_date: "2026-10-12",
+  location: "Example studio, Example City", created_at: "2026-10-09T18:58:17Z", event_date: "2026-10-12",
   event_time: "2:00 PM", client_name: NAME, ...extra });
 const paid = { id: "inv-paid", kind: "full", title: "Session payment", status: "paid", paid_at: "2026-10-09T18:58:40Z", due_date: "2026-10-12", amount_cents: 15000, line_items: [] };
 const msgs = () => [
-  { id: "m1", sender: "studio", created_at: "2026-10-09T23:07:49Z", body: "Hi Dave, thanks for booking! You're all set for Monday.\n\nSee you Monday!\nNelson" },
+  { id: "m1", sender: "studio", created_at: "2026-10-09T23:07:49Z", body: "Hi Synthetic, thanks for booking! You're all set for Monday.\n\nSee you Monday!\nNelson" },
   { id: "m2", sender: "client", created_at: "2026-10-16T19:02:37Z", body: "Selected 3 images for editing from \"Headshots — Oct 12\". Ready when you are.\n\nUntitled Session6715.jpg\nUntitled Session6722.jpg\nUntitled Session6741.jpg" },
 ];
 const future = new Date(Date.now() + 9 * 864e5).toISOString().slice(0, 10);
@@ -61,16 +62,16 @@ const S = {
     { id: "gf3", kind: "final", title: "Headshots — Edits", locked: false, selection_limit: null, items: finals("gf3") }] }),
   editing: () => ({ p: project("p-editing", { status: "in_production" }), inv: [paid], galleries: [
     { id: "ge", kind: "proof", title: "Headshots — Oct 12", locked: true, selection_limit: 3, items: proofs("ge", [6715, 6722, 6741]) }] }),
-  pay: () => ({ p: project("p-pay", { status: "quoted", title: "Marisol Vega — Brand Content Day", event_date: future, client_name: "Marisol Vega", service: "brand_content" }),
+  pay: () => ({ p: project("p-pay", { status: "quoted", title: "Synthetic Brand Client — Brand Content Day", event_date: future, client_name: "Synthetic Brand Client", service: "brand_content" }),
     inv: [{ id: "inv-dep", kind: "deposit", title: "50% deposit", status: "sent", due_date: future, amount_cents: 75000, line_items: [{ label: "Brand content day, half up front" }] }], galleries: [] }),
   sign: () => ({ p: project("p-sign", { status: "quoted", event_date: future }), inv: [{ id: "inv-s", kind: "deposit", title: "50% deposit", status: "sent", due_date: future, amount_cents: 75000 }],
     contracts: [{ id: "ct1", title: "Photography agreement", status: "sent", body: "1. Scope\nOne studio headshot session.\n\n2. Delivery\nThree retouched finals.", signer_name: null, signed_at: null }], galleries: [] }),
   booked: () => ({ p: project("p-booked", { status: "booked", event_date: future }), inv: [paid], galleries: [] }),
-  fresh: () => ({ p: project("p-new", { status: "new", event_date: null, event_time: null, location: null, title: "Andre Okafor — Music video", client_name: "Andre Okafor", service: "music_video" }), inv: [], galleries: [] }),
-  video: () => ({ p: project("p-video", { title: "Andre Okafor — Music video", client_name: "Andre Okafor", service: "music_video" }), inv: [paid], galleries: [
-    { id: "gv", kind: "video", title: "Final cut", locked: false, selection_limit: null, items: [{ id: "v1", filename: "Andre Okafor Final Cut.mp4", size_bytes: 9e7, sort: 1, selected: false, url: "https://img.test/full/clip.mp4", thumb_url: null, download_url: "https://img.test/full/clip.mp4?download=x" }] }] }),
+  fresh: () => ({ p: project("p-new", { status: "new", event_date: null, event_time: null, location: null, title: "Synthetic Artist — Music video", client_name: "Synthetic Artist", service: "music_video" }), inv: [], galleries: [] }),
+  video: () => ({ p: project("p-video", { title: "Synthetic Artist — Music video", client_name: "Synthetic Artist", service: "music_video" }), inv: [paid], galleries: [
+    { id: "gv", kind: "video", title: "Final cut", locked: false, selection_limit: null, items: [{ id: "v1", filename: "Synthetic Artist Final Cut.mp4", size_bytes: 9e7, sort: 1, selected: false, url: "https://img.test/full/clip.mp4", thumb_url: null, download_url: "https://img.test/full/clip.mp4?download=x" }] }] }),
   delivered: () => ({ p: project("p-delivered"), inv: [paid], galleries: [] }),
-  files: () => ({ p: project("p-files", { title: "Andre Okafor — Music video", client_name: "Andre Okafor", service: "music_video" }), inv: [paid], galleries: [],
+  files: () => ({ p: project("p-files", { title: "Synthetic Artist — Music video", client_name: "Synthetic Artist", service: "music_video" }), inv: [paid], galleries: [],
     files: [{ url: "https://drive.example.com/final-cut", label: "Final cut (4K)" }, { url: "javascript:alert(1)", label: "Bad link" }] }),
   late: () => ({ p: project("p-late", { status: "booked" }), inv: [{ id: "inv-late", kind: "deposit", title: "50% deposit", status: "sent", due_date: "2026-10-01", amount_cents: 7500 }], galleries: [] }),
   round2: () => ({ p: project("p-round2"), inv: [paid], galleries: [
@@ -110,6 +111,8 @@ async function wire(page, errors) {
     const s = body.p_token === "tok" ? get(body.p_project) : null;
     if (!s) return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ message: "not_found" }) });
     if (fn === "bk_crm_portal_quotes") return route.fulfill({json:{rows:[]}});
+    if (fn === "bk_portal_preparation") return route.fulfill({json:{current:null,history:[]}});
+    if (["bk_portal_video_reviews", "bk_ops_portal_retainers"].includes(fn)) return route.fulfill({json:{rows:[]}});
     if (fn === "bk_crm_portal_billing") return route.fulfill({json:{billing_provider:"stripe",external_billing_url:null,paid_amounts:[]}});
     if (fn === "bk_portal") return route.fulfill({ json: { project: s.p, invoices: s.inv, contracts: s.contracts, files: s.files, messages: s.msgs } });
     if (fn === "bk_portal_send") { s.msgs.push({ id: `m${s.msgs.length + 1}`, sender: "client", created_at: new Date().toISOString(), body: body.p_body }); return route.fulfill({ json: null }); }
@@ -188,12 +191,12 @@ try {
   const page = await ctx.newPage();
   await wire(page, errors);
 
-  /* --- delivered: Dave's page, the mockup --- */
+  /* --- delivered: Synthetic customer's page, the mockup --- */
   await page.goto(url("p-ready"));
   await page.waitForSelector("#app:not([hidden])");
   await page.waitForFunction(() => [...document.querySelectorAll(".g-cell.final img")].every((i) => i.complete && i.naturalWidth));
   ok((await text(page, "#headline")) === "Your photos are ready.", "ready headline");
-  ok((await text(page, "#eyebrow")) === "Welcome, Dave", "first visit: Welcome, first name");
+  ok((await text(page, "#eyebrow")) === "Welcome, Synthetic", "first visit: Welcome, first name");
   ok((await text(page, "#pStatus")) === "Delivered", "status pill");
   ok((await text(page, "#heroCta .btn")).includes("Download all 3 photos"), "hero download label");
   ok((await text(page, "#heroCta .hero-note")) === "ZIP file · 116 MB", "zip size note matches the mockup (116 MB)");
@@ -216,7 +219,7 @@ try {
   const dl = page.waitForEvent("download", { timeout: 15000 });
   await page.click("#heroCta .btn");
   const file = await dl;
-  ok(file.suggestedFilename() === "Dave Ladetto — Headshots.zip", "zip name: " + file.suggestedFilename());
+  ok(file.suggestedFilename() === "Synthetic Customer — Headshots.zip", "zip name: " + file.suggestedFilename());
   await page.waitForFunction(() => !document.querySelector("#heroCta .btn[aria-busy]"));
   ok((await text(page, "#heroCta .btn")).includes("Download all 3 photos"), "button label restored after zip");
 
@@ -237,7 +240,7 @@ try {
   // tabs: click, keys, hash, reload keeps the tab
   await page.click("#tab-details");
   ok(await page.locator("#panel-details").isVisible() && (await page.locator("#panel-photos").isHidden()), "details tab shows its panel");
-  ok(/2:00 PM/.test(await text(page, "#pDetails")) && /1623 Main St/.test(await text(page, "#pDetails")), "details keep call time + address");
+  ok(/2:00 PM/.test(await text(page, "#pDetails")) && /Example studio/.test(await text(page, "#pDetails")), "details keep call time + address");
   await page.focus("#tab-details");
   await page.keyboard.press("ArrowRight");
   ok((await page.evaluate(() => document.activeElement.id)) === "tab-messages", "arrow moves to messages tab");
@@ -245,7 +248,7 @@ try {
   await page.reload();
   await page.waitForSelector("#app:not([hidden])");
   ok((await page.locator(".tab[aria-selected=true]").innerText()) === "Messages", "reload keeps the messages tab");
-  ok((await text(page, "#eyebrow")) === "Welcome back, Dave", "return visit: Welcome back");
+  ok((await text(page, "#eyebrow")) === "Welcome back, Synthetic", "return visit: Welcome back");
   ok((await page.locator(".msg.me").count()) === 1 && (await page.locator(".msg.them").count()) === 1, "chat bubbles by sender");
 
   // message: type, Enter sends, shows up, box clears
@@ -278,7 +281,7 @@ try {
   // account menu
   await page.click("#whoBtn");
   ok(await page.locator("#whoMenu").isVisible() && (await page.getAttribute("#whoBtn", "aria-expanded")) === "true", "menu opens");
-  ok((await text(page, "#whoFull")) === NAME && (await text(page, "#avatar")) === "DL", "menu name + initials");
+  ok((await text(page, "#whoFull")) === NAME && (await text(page, "#avatar")) === "SC", "menu name + initials");
   await page.keyboard.press("Escape");
   ok(await page.locator("#whoMenu").isHidden() && (await page.evaluate(() => document.activeElement.id)) === "whoBtn", "Escape closes menu, focus returns");
   await page.click("#whoBtn");
@@ -401,7 +404,7 @@ try {
   ok((await page.locator(".tab[aria-selected=true]").innerText()) === "Project details", "sign opens on details");
   const signBtn = page.locator(".ct-sign button[type=submit]");
   ok(await signBtn.isDisabled(), "sign disabled until name + box");
-  await page.fill("[data-sig-name]", "Dave Ladetto");
+  await page.fill("[data-sig-name]", "Synthetic Customer");
   await page.check("[data-sig-agree]");
   ok(await signBtn.isEnabled(), "sign enabled");
   await signBtn.click();
@@ -420,7 +423,7 @@ try {
 
   await page.goto(url("p-new"));
   await page.waitForSelector("#app:not([hidden])");
-  ok((await text(page, "#headline")) === "We got your request." && (await text(page, "#eyebrow")) === "Welcome, Andre", "new inquiry hero");
+  ok((await text(page, "#headline")) === "We got your request." && (await text(page, "#eyebrow")) === "Welcome, Synthetic", "new inquiry hero");
   ok(await page.locator("#tab-invoices").isVisible() && /No invoices yet/.test(await page.locator("#pInvoices").innerText()), "new: invoices tab with empty state");
 
   await page.goto(url("p-video"));

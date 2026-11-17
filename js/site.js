@@ -1,4 +1,9 @@
 /* Taylormade — BOOK · index page (v2: interactive futurism) */
+// This page keeps its classic deferred entrypoint; load the isolated module
+// without changing the booking page's script contract.
+const leadAttributionReady = import("./lead-attribution.js?v=1")
+  .then(({ captureLeadAttribution }) => captureLeadAttribution())
+  .catch(() => ({}));
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -381,7 +386,11 @@ $("#bookForm").addEventListener("submit", async (e) => {
       p_source: $("#fSource").value || "Website",
     };
     const { submissionFor, completeSubmission } = await import("./intake-request.js?v=1");
-    const r = await BK.rpc("bk_submit_inquiry_once", {p_submission_id: await submissionFor("inquiry", payload), ...payload});
+    const attributedPayload = { ...payload, p_attribution: await leadAttributionReady };
+    const r = await BK.rpc("bk_submit_inquiry_attributed", {
+      p_submission_id: await submissionFor("inquiry", attributedPayload),
+      ...attributedPayload,
+    });
     const url = `${location.origin}${location.pathname.replace(/index\.html$/, "").replace(/\/$/, "")}/portal.html?p=${r.id}&t=${r.token}`;
     $("#portalLink").textContent = url;
     $("#portalLink").href = url;
@@ -419,7 +428,11 @@ $("#digitalsForm").addEventListener("submit", async (e) => {
       p_event_date: $("#dgDate").value || null,
     };
     const { submissionFor, completeSubmission } = await import("./intake-request.js?v=1");
-    const r = await BK.rpc("bk_book_digitals_once", {p_submission_id: await submissionFor("digitals", payload), ...payload});
+    const attributedPayload = { ...payload, p_attribution: await leadAttributionReady };
+    const r = await BK.rpc("bk_book_digitals_attributed", {
+      p_submission_id: await submissionFor("digitals", attributedPayload),
+      ...attributedPayload,
+    });
     const url = `${location.origin}${location.pathname.replace(/index\.html$/, "").replace(/\/$/, "")}/portal.html?p=${r.id}&t=${r.token}`;
     completeSubmission("digitals");
     location.href = url; // straight to the portal, where the $100 invoice is waiting

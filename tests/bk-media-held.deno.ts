@@ -1,3 +1,4 @@
+// Client, project and venue details in this fixture are synthetic.
 // bk-media held-video gate, run against an in-memory stand-in for Supabase (never touches prod).
 // Run: deno run --allow-env --import-map=tests/fixtures/bk-media-importmap.json tests/bk-media-held.deno.ts
 // The import map swaps npm:@supabase/supabase-js for tests/fixtures/fake-supabase.ts.
@@ -15,15 +16,15 @@ let handler: (req: Request) => Promise<Response>;
 await import("../supabase/functions/bk-media/index.ts");
 
 const P = "proj-1", G = "gal-video", INV = "inv-bal";
-const ORIG = `${P}/${G}/abc-hide-and-haunt-commercial.mp4`;
-const PREV = `${P}/${G}/preview/abc-hide-and-haunt-commercial.mp4`;
-const STILL = `${P}/${G}/preview/abc-hide-and-haunt-commercial.jpg`;
+const ORIG = `${P}/${G}/abc-synthetic-campaign-commercial.mp4`;
+const PREV = `${P}/${G}/preview/abc-synthetic-campaign-commercial.mp4`;
+const STILL = `${P}/${G}/preview/abc-synthetic-campaign-commercial.jpg`;
 function seed(status: string, opts: { preview?: boolean; unlock?: string | null; invProject?: string; closed?: boolean; still?: boolean } = {}) {
   fake.reset({
-    bk_projects: [{ id: P, access_token: "tok", title: "Delilah Amaro — Hide & Haunt Commercial", client_name: "Delilah Amaro", service: "other", status: "booked", client_email: "d@x.test" }],
-    bk_galleries: [{ id: G, project_id: P, kind: "video", title: "Hide & Haunt commercial", locked: false, created_at: "2026-10-29",
+    bk_projects: [{ id: P, access_token: "tok", title: "Synthetic Video Client — Synthetic Campaign Commercial", client_name: "Synthetic Video Client", service: "other", status: "booked", client_email: "client@example.test" }],
+    bk_galleries: [{ id: G, project_id: P, kind: "video", title: "Synthetic Campaign commercial", locked: false, created_at: "2026-10-29",
       unlock_invoice_id: opts.unlock === undefined ? INV : opts.unlock, preview_closed_at: opts.closed ? "2026-10-30T00:40:00Z" : null }],
-    bk_gallery_items: [{ id: "it-1", gallery_id: G, project_id: P, storage_path: ORIG, filename: "Hide & Haunt Commercial.mp4", sort: 1, created_at: "2026-10-29" }],
+    bk_gallery_items: [{ id: "it-1", gallery_id: G, project_id: P, storage_path: ORIG, filename: "Synthetic Campaign Commercial.mp4", sort: 1, created_at: "2026-10-29" }],
     bk_invoices: [{ id: INV, project_id: opts.invProject ?? P, title: "Final balance", amount_cents: 75000, status }],
     profiles: [{ id: "staff-uid", role: "admin" }],
   }, [ORIG, ...(opts.preview === false ? [] : [PREV]), ...(opts.still === false ? [] : [STILL])]);
@@ -44,11 +45,17 @@ let g = gallery(r.json), it = g?.items?.[0];
 ok(r.status === 200, "list ok");
 ok(g.held === true, "gallery is held while the balance is unpaid");
 ok(g.unlock && g.unlock.invoice_id === INV && g.unlock.amount_cents === 75000 && g.unlock.paid === false && g.unlock.payable === true, "unlock names the invoice and amount, payable");
-ok(it.thumb_url === null && !fake.signed.includes(`${P}/${G}/thumbs/abc-hide-and-haunt-commercial.mp4`), "held thumbs are looked up next to the preview, not the original");
+ok(it.thumb_url === null && !fake.signed.includes(`${P}/${G}/thumbs/abc-synthetic-campaign-commercial.mp4`), "held thumbs are looked up next to the preview, not the original");
 ok(it.url && it.url.includes("/preview/"), "client streams the preview: " + it.url);
 ok(it.download_url === null, "no download link while held");
+ok(it.asset_key === "opaque-preview-key" && it.media_revision === "synthetic-revision", "held player binds only to the preview revision");
+ok(!JSON.stringify(it).includes("opaque-clean-key"), "held response never exposes the clean asset binding");
 ok(!JSON.stringify(r.json).includes(`sign/${ORIG}`), "the original path is never signed for the client");
 ok(!fake.signed.includes(ORIG), "storage was never asked to sign the original: " + fake.signed.join(", "));
+fake.failBindings = true;
+r = await list({ project_id: P, token: "tok" });
+it = gallery(r.json).items[0];
+ok(it.url?.includes("/preview/") && it.asset_key === null && it.media_revision === null, "binding lookup failure preserves preview playback but fails review controls closed");
 
 // 2. preview missing: no link at all (fail closed), still never the original
 seed("sent", { preview: false });
@@ -56,6 +63,7 @@ fake.signed.length = 0;
 r = await list({ project_id: P, token: "tok" });
 it = gallery(r.json).items[0];
 ok(it.url === null && it.download_url === null, "missing preview gives no link, not the original");
+ok(it.asset_key === null, "missing preview has no review binding");
 ok(!fake.signed.includes(ORIG), "missing preview never falls back to signing the original");
 
 // 3. void invoice stays held
@@ -79,6 +87,7 @@ g = gallery(r.json); it = g.items[0];
 ok(g.held === false && g.unlock.paid === true, "paid = not held");
 ok(it.url && !it.url.includes("/preview/") && it.url.includes(ORIG), "paid streams the original");
 ok(it.download_url && it.download_url.includes("download="), "paid has a named download link");
+ok(it.asset_key === "opaque-clean-key", "paid player binds to clean revision");
 
 // 5. staff always see the original, even unpaid
 seed("sent");
@@ -99,6 +108,7 @@ r = await list({ project_id: P, token: "tok" });
 g = gallery(r.json); it = g.items[0];
 ok(g.held === true && g.preview_closed === true && g.unlock.payable === true, "closed: still held, flagged closed, still payable");
 ok(it.url === null && it.download_url === null, "closed: no video link and no download");
+ok(it.asset_key === null, "closed preview has no review binding");
 ok(it.thumb_url && it.thumb_url.includes(STILL), "closed: the still comes back as the thumb: " + it.thumb_url);
 ok(!fake.signed.includes(PREV) && !fake.signed.includes(ORIG), "closed: storage never signs the preview or the original: " + fake.signed.join(", "));
 

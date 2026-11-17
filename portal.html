@@ -18,6 +18,8 @@
   <!-- the wordmark is the only Unbounded on the page: load just its letters -->
   <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@800&text=TAYLORMADE%2FCREATIVE&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/client.css?v=12">
+  <link rel="stylesheet" href="css/crm-client-experience.css?v=1">
+  <link rel="stylesheet" href="css/crm-operations.css?v=1">
 </head>
 <body>
 
@@ -137,6 +139,8 @@
             <section class="panel" role="tabpanel" id="panel-details" aria-labelledby="tab-details" tabindex="-1" hidden>
               <h2 class="sec-h">Project details</h2>
               <dl class="facts" id="pDetails"></dl>
+              <div id="clientPreparationRoot" hidden></div>
+              <section id="clientRetainersRoot" hidden aria-label="Included project services"></section>
               <section id="quotesBlock" class="contracts" hidden aria-labelledby="quoteHeading">
                 <h3 id="quoteHeading" class="sub-h">Your quote</h3>
                 <div id="pQuotes"></div>
@@ -192,7 +196,7 @@
   </main>
 
   <script src="js/config.js"></script>
-  <script src="js/gallery-core.js?v=13"></script>
-  <script src="js/client-portal.js?v=11"></script>
+  <script src="js/gallery-core.js?v=14"></script>
+  <script src="js/client-portal.js?v=12"></script>
 </body>
 </html>

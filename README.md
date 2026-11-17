@@ -81,6 +81,17 @@ Missing payment configuration must be resolved before collecting through Stripe.
 
 ## CRM release (2026-11-16)
 
+### Studio workflow additions
+
+- **Client preparation** appears at the top of each CRM project. Use the service checklist, edit its questions, then publish it to the client's existing portal. Clients can save partial answers and submit for your review. A revised checklist keeps the previous answers in its history.
+- **Morning follow-up** on Today opens the conversation or a deterministic reply template. Project cadence settings schedule one staff action at a time and pause after client responses. Booking and closing end the sales cadence.
+- **Capture** saves a pasted conversation, contact channel and next action together. Install the CRM from your phone browser for a home-screen shortcut. Supported browsers can share text directly into Capture.
+- **Video review** publishes a specific available video version for timestamped feedback and approval in the portal. Publish a fresh review when the file or payment access changes. Resolve client notes in the CRM project.
+- **Reports** compares project opportunities, bookings and recorded receipts by normalized source and campaign, with date filters and response times. Website forms capture campaign labels and the referring host while removing URL query strings from stored page paths.
+- **Project earnings** combines recorded receipts, entered expenses and logged time. Set staff internal hourly cost assumptions to include labor. The contribution calculation is receipts minus recorded costs and labor assumptions, before overhead and tax.
+- **Editing workload** combines daily editing blocks, staff capacity, existing tasks and bookings in Central Time. Plan work here and manage shoot availability in Schedule.
+- **Monthly packages** records included deliverables, fulfillment, remaining allowances and renewal tasks. Open a monthly work period from the package to create its linked project, then prepare its billing draft using the assigned provider. Clients see their period allowances in the portal.
+
 The CRM adds a customer record linked to multiple jobs, email-optional manual leads, retry-safe public and manual intake, scheduled next actions, stage-driven preparation/delivery/rebooking tasks, an immutable activity history, and versioned quotes. Published quotes can be approved or declined in the existing client portal. Quote approval does not reserve a date or record a payment. No AI drafting is used.
 
 Today highlights active projects without a next action, failed/stalled queued messages, held incoming replies, billing that needs confirmation, and payments needing booking review. Search and totals are calculated before pagination. HoneyBook balances require explicit manual recording; the app does not claim an automatic HoneyBook synchronization.

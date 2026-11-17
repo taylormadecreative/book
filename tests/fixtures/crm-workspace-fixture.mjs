@@ -167,6 +167,35 @@ export function stubCRM() {
         });
       }
       switch (name) {
+        case "bk_crm_client_experience":
+          return response({ preparations: [], reviews: [], video_items: [], prep_defaults: {
+            title: "Prepare for your shoot", instructions: "Share your goals before production.",
+            questions: [{ id: "goal", label: "What should this shoot accomplish?", type: "long", required: true }],
+          } });
+        case "bk_crm_morning": {
+          const rows = data.tasks.filter(t => t.kind === "followup" && t.status === "open").map(t => {
+            const project = data.projects.find(p => p.id === t.project_id);
+            return { ...t, client_name: project.client_name, project_title: project.title, stage: project.status,
+              phone: project.client_phone, source: project.referral_source,
+              conversation_url: "/inbox/?p=" + project.id, template_url: "/inbox/?p=" + project.id + "&template=call" };
+          });
+          return response({ rows, total: rows.length, counts: { overdue: rows.length, today: 0, unassigned: 0 } });
+        }
+        case "bk_crm_followup_settings":
+          return response({ project_id: args.p_project, enabled: false, lead_days: [1,3,7], quote_days: [3,7,14], phase: "quote", state: "paused", step: 0 });
+        case "bk_crm_source_report":
+          return response({ from: args.p_from, to: args.p_to, basis: "lead_created_date", totals: { leads: 1, booked: 0, receipts_cents: 0, responded: 0 },
+            rows: [{ source: "Instagram", leads: 1, booked: 0, receipts_cents: 0, conversion_pct: 0, responded: 0, median_response_hours: null }], campaigns: [], campaign_total: 0 });
+        case "bk_ops_project": {
+          const project = data.projects.find(p => p.id === args.p_project);
+          return response({ expenses: [], time_entries: [], allocations: [], rates: [], periods: [], retainers: { rows: [], total: 0 },
+            profit: { rows: [{ project_id: project.id, title: project.title, client_name: project.client_name,
+              quote_cents: 0, invoiced_cents: 25000, received_cents: 0, expenses_cents: 0, labor_cents: 0, minutes: 0, contribution_cents: 0 }] } });
+        }
+        case "bk_ops_retainers":
+          return response({ rows: [], total: 0 });
+        case "bk_ops_capacity":
+          return response({ week: args.p_week, staff: data.staff.map(s => ({ ...s, weekly_minutes: null, working_days: null, assigned_minutes: 0 })), allocations: [], tasks: data.tasks, bookings: [] });
         case "bk_crm_health":
           return data.failHealth
             ? response(null, { message: "Health connection unavailable" })

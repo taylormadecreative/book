@@ -33,6 +33,7 @@ let data = null;   // last bk_portal payload
 let media = null;  // what BKGallery.mount found
 let heroKey = "", lastMsgKey = "", lastCtKey = null, lastInvKey = null, lastFilesKey = null;
 let extrasCents = Promise.resolve(0), remounting = false, polls = 0;
+const clientExperience = {};
 
 // browser storage is a convenience only (private mode can refuse it)
 const store = {
@@ -138,7 +139,34 @@ async function init() {
   $("#app").hidden = false;
   $("#barRight").hidden = false;
   selectTab(initialTab());
+  mountClientExperienceFeatures();
   setInterval(refresh, 10000);
+}
+
+async function mountClientExperienceFeatures() {
+  try {
+    const module = await import("./crm-client-experience.js?v=1");
+    const access = {rpc: (name, args) => BK.rpc(name, args), projectId: PID, token: TOKEN};
+    const results = await Promise.all([
+      module.mountPortalPreparation($("#clientPreparationRoot"), access),
+      module.mountPortalVideoReviews($("#galleryRoot"), access),
+    ]);
+    [clientExperience.preparation, clientExperience.video] = results;
+  } catch (_) {
+    const root = $("#clientPreparationRoot");
+    root.hidden = false;
+    root.innerHTML = '<p class="ce-error" role="alert">Preparation and review could not load. Your other project details remain available.</p>';
+  }
+  try {
+    const module = await import("./crm-operations.js?v=1");
+    clientExperience.retainers = await module.mountPortalRetainers($("#clientRetainersRoot"), {
+      rpc: (name, args) => BK.rpc(name, args), projectId: PID, token: TOKEN,
+    });
+  } catch (_) {
+    const root = $("#clientRetainersRoot");
+    root.hidden = false;
+    root.innerHTML = '<p class="ce-error" role="alert">Included services could not load. Ask Nelson for the current details.</p>';
+  }
 }
 
 function fail(kind) {
@@ -161,6 +189,9 @@ async function refresh() {
     if (next && next.project) { data = next; render(); unlockVideo(); }
   } catch (_) { /* transient; keep the last view */ }
   if (++polls % 3 === 0) { await loadCrmPortal(); renderQuotes(); renderHero(); }
+  if (polls % 3 === 0) {
+    for (const feature of Object.values(clientExperience)) feature?.reload?.();
+  }
   if (polls % 6 === 0) previewClosing();
 }
 
