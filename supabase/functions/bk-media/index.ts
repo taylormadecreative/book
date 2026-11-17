@@ -61,6 +61,15 @@ const previewPath = (p: string) => p.replace(/([^/]+)$/, "preview/$1");
 // Once Nelson closes the preview, only a still is left: preview/<name>.jpg (none = a plain dark frame).
 const posterPath = (p: string) => previewPath(p).replace(/\.[^./]+$/, "") + ".jpg";
 
+// Tie the actual HTTP cache key to the entitled object revision, not merely
+// the player metadata. Storage may reuse a signed URL for an overwritten path.
+export function withVideoAssetNonce(url: string | null, assetKey: string | null): string | null {
+  if (!url || !assetKey) return url;
+  const versioned = new URL(url);
+  versioned.searchParams.set("cacheNonce", assetKey);
+  return versioned.href;
+}
+
 // Batch-sign: one storage call for every inline URL and one for every thumb,
 // instead of one call per item (a 400-photo proofing gallery would be 800+ calls).
 // Items in a held gallery sign only their preview: the original never leaves storage before it's paid,
@@ -83,22 +92,27 @@ async function signItems(db: ReturnType<typeof svc>, items: any[], kindByGallery
     let download_url: string | null = null;
     const kind = kindByGallery[it.gallery_id];
     const binding = bindings.get(it.id);
+    const assetKey: string | null = kind === "video" && !closed.has(it.gallery_id)
+      ? (held.has(it.gallery_id) ? binding?.preview_key : binding?.clean_key) ?? null
+      : null;
+    const inlineUrl = closed.has(it.gallery_id) ? null : inlineBy.get(paths[i]) ?? null;
     if ((kind === "final" || kind === "video") && !held.has(it.gallery_id)) {
       const dl = await bucket.createSignedUrl(it.storage_path, SIGN_TTL, { download: it.filename || "download" });
-      download_url = dl.data?.signedUrl || null;
+      const signedDownload = dl.data?.signedUrl || null;
+      download_url = kind === "video"
+        ? withVideoAssetNonce(signedDownload, assetKey)
+        : signedDownload;
     }
     return {
       id: it.id, gallery_id: it.gallery_id, filename: it.filename, content_type: it.content_type,
       size_bytes: it.size_bytes, sort: it.sort, selected: it.selected,
       meta: it.meta || {}, client_note: it.client_note ?? null,
-      url: closed.has(it.gallery_id) ? null : inlineBy.get(paths[i]) ?? null,
+      url: kind === "video" ? withVideoAssetNonce(inlineUrl, assetKey) : inlineUrl,
       thumb_url: (closed.has(it.gallery_id) ? inlineBy.get(paths[i]) : thumbBy.get(thumbPath(paths[i]))) ?? null,
       download_url,
       // The review UI binds to this exact entitled player, never merely an item ID.
       media_revision: kind === "video" ? binding?.media_revision ?? null : null,
-      asset_key: kind === "video" && !closed.has(it.gallery_id)
-        ? (held.has(it.gallery_id) ? binding?.preview_key : binding?.clean_key) ?? null
-        : null,
+      asset_key: assetKey,
     };
   }));
 }
