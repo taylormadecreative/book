@@ -618,8 +618,31 @@ body::after { display: none; }
 .ga-all:not([open]) summary { margin-bottom: 0; }
 .ga-prog { font-family: var(--font-mono); font-weight: 500; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold-ink); margin-top: 0.6rem; }
 
-.ga-new { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 0.9fr) auto; gap: 0.6rem; margin-top: 1rem; }
-@container (max-width: 640px) { .ga-new { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+/* what she can do in this gallery, said plainly under the title */
+.ga-says { margin: 0.3rem 0 0; font-family: var(--font-body); font-size: 0.9rem; line-height: 1.4; color: var(--paper-muted); max-width: 60ch; }
+.ga-says-proof { color: var(--gold-ink); }
+.ga-says-final { color: var(--green-ink); }
+.ga-lim { display: inline-flex; align-items: center; gap: 0.4rem; height: 30px; padding: 0 0.3rem 0 0.75rem; border: 1px solid var(--paper-edge); border-radius: 999px; font-family: var(--font-ui); font-weight: 600; font-size: 0.8rem; color: var(--paper-muted); }
+.ga-lim input { width: 3.6em; height: 22px; padding: 0 0.4em; border: 1px solid var(--paper-line); border-radius: 6px; background: #fffdf9; color: var(--paper-ink); font-family: var(--font-ui); font-weight: 600; font-size: 0.85rem; text-align: center; font-variant-numeric: tabular-nums; }
+.ga-switch[data-armed="true"] { border-color: var(--paper-ink); background: var(--paper-ink); color: #f4f1ea; }
+
+/* new gallery: pick what it's for first; nothing is pre-chosen, so the type is always a decision */
+.ga-new { margin-top: 1.1rem; padding-top: 1rem; border-top: 1px solid var(--paper-line); }
+.ga-types { border: 0; margin: 0 0 0.7rem; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 0.5rem; }
+.ga-types legend { padding: 0; margin-bottom: 0.55rem; }
+.ga-type { position: relative; display: grid; gap: 0.2rem; padding: 0.7rem 0.8rem 0.75rem 2.3rem; border: 1px solid var(--paper-edge); border-radius: 10px; background: #fffdf9; cursor: pointer; transition: border-color 0.15s var(--ease), background 0.15s var(--ease), transform 0.12s var(--ease); }
+.ga-type input { position: absolute; left: 0.8rem; top: 0.85rem; width: 16px; height: 16px; margin: 0; accent-color: var(--paper-ink); }
+.ga-type b { font-family: var(--font-ui); font-weight: 600; font-size: 0.95rem; color: var(--paper-ink); }
+.ga-type span { font-family: var(--font-body); font-size: 0.82rem; line-height: 1.35; color: var(--paper-muted); }
+.ga-type:has(input:checked) { border-color: var(--paper-ink); background: #fbf0d4; box-shadow: inset 0 0 0 1px var(--paper-ink); }
+.ga-type:has(input:focus-visible) { outline: 2px solid var(--paper-ink); outline-offset: 2px; }
+.ga-type:active { transform: scale(0.98); }
+@media (hover: hover) and (pointer: fine) { .ga-type:hover { border-color: var(--paper-ink); } }
+.ga-new-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.9fr) auto; gap: 0.6rem; }
+.ga-new-row input[hidden] { display: none; }
+.ga-new-row:has(#galLimit[hidden]) { grid-template-columns: minmax(0, 1fr) auto; }
+#galCreate:disabled { opacity: 0.45; cursor: not-allowed; }
+@container (max-width: 640px) { .ga-new-row, .ga-new-row:has(#galLimit[hidden]) { grid-template-columns: minmax(0, 1fr); } }
 
 /* contracts (e-sign) */
 .ct-editor { border: 1px solid #dcbd6e; background: #fffdf9; border-radius: 10px; padding: 0.9rem; margin: 0.6rem 0 0.9rem; }

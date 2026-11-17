@@ -120,7 +120,7 @@ try {
   ok(/Make the building bigger\./.test(await locCard.locator(".ga-notes").innerText()), "location notes listed");
 
   // a new location starts as a draft, as a storyboard-kind review with purpose location
-  await page.selectOption("#galKind", "location");
+  await page.check(`input[name="galKind"][value="location"]`);
   await page.fill("#galTitle", "");
   await page.click("#galCreate");
   await page.waitForTimeout(400);
@@ -129,7 +129,7 @@ try {
   inserts.length = 0;
 
   // a new storyboard starts as a draft
-  await page.selectOption("#galKind", "storyboard");
+  await page.check(`input[name="galKind"][value="storyboard"]`);
   await page.fill("#galTitle", "Synthetic Campaign storyboard v3");
   await page.click("#galCreate");
   await page.waitForTimeout(400);
