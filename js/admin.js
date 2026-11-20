@@ -141,7 +141,7 @@ async function load(afterSend = false) {
 }
 
 /* preserve form values + focus across detail re-renders */
-const FORM_IDS = ["noteBox", "achatInput", "invTitle", "invAmt", "invKind", "fileLabel", "fileUrl", "galTitle", "galLimit", "galKind"];
+const FORM_IDS = ["noteBox", "achatInput", "invTitle", "invAmt", "invKind", "fileLabel", "fileUrl", "galTitle", "galLimit"];
 function captureForms() {
   const ae = document.activeElement;
   const saved = {};
@@ -155,6 +155,7 @@ function captureForms() {
 }
 function restoreForms(cap) {
   if (!cap) return;
+
   FORM_IDS.forEach((id) => {
     const el = document.getElementById(id);
     if (!el || cap.saved[id] == null) return;
@@ -444,6 +445,19 @@ function autosize(el) {
 
 /* ---------------- galleries (photos & video) ---------------- */
 const GAL_KIND = { proof: "Proofing", final: "Edited photos", video: "Video", storyboard: "Storyboard" };
+// The new-gallery choice. Each type says what the CLIENT can do in it, because the two photo
+// types look the same in admin but behave opposite in her portal (Fran, 11/16: 240 proofs went
+// up as edited photos, so she could download everything and pick nothing).
+const GAL_TYPES = [
+  { v: "proof", name: "Proofs to pick from", says: "She picks favorites for you to edit. No downloads.", btn: "Create proofs gallery" },
+  { v: "final", name: "Finished edits", says: "She downloads them. No picking.", btn: "Create finished edits gallery" },
+  { v: "video", name: "Video", says: "She watches and downloads.", btn: "Create video gallery" },
+  { v: "storyboard", name: "Storyboard", says: "She reviews frames and leaves notes.", btn: "Create storyboard draft" },
+  { v: "location", name: "Location", says: "She approves the place you'll shoot.", btn: "Create location draft" },
+];
+// the type he's choosing, per project; never carried to the next gallery or the next client
+let galNew = { pid: null, v: null };
+const galNewKind = (pid) => (galNew.pid === pid ? galNew.v : null);
 // a storyboard frame's code from its caption ("3B"), else its place in the set
 const frameCode = (it) => (it.meta && it.meta.code) || `Frame ${it.sort}`;
 
@@ -469,7 +483,7 @@ function galleriesCard(p) {
     const isBoard = g.kind === "storyboard";
     const notes = isBoard ? items.filter((i) => i.client_note) : [];
     const meta = g.kind === "proof"
-      ? `<span class="pill ${sel ? "gold" : ""}">${sel} selected${g.selection_limit != null ? ` / ${g.selection_limit}` : ""}</span>`
+      ? `<span class="pill ${sel ? "gold" : ""}">${sel} picked${g.locked && g.selection_limit != null ? ` / ${g.selection_limit}` : ""}</span>`
       : isBoard
         ? (isDraft(g) ? `<span class="pill">Draft · ${items.length} frame${items.length === 1 ? "" : "s"} · client can't see it</span>`
           : g.locked && g.review_outcome === "approved" ? `<span class="pill green">Approved</span>`
@@ -495,6 +509,20 @@ function galleriesCard(p) {
         <label class="ga-payurl"><span class="hud">Deposit link</span>
           <input type="url" inputmode="url" data-payurl="${g.id}" value="${esc(g.pay_url || "")}" placeholder="https://… HoneyBook invoice. Approving takes her here.">
         </label>` : "";
+    // what she can do with it, in her words. Proofs and edits look alike here; in her portal they're opposites
+    const lim = g.selection_limit;
+    const says = g.kind === "proof"
+      ? (g.locked ? (sel ? "Her picks are in. She sees only those now." : "Locked. She can't pick right now.")
+        : `She picks${lim != null ? ` up to ${lim}` : " as many as she wants"}. No downloads.`)
+      : g.kind === "final" ? "She downloads these. No picking."
+      : isVideo && !g.unlock_invoice_id ? "She watches and downloads."
+      : "";
+    // wrong type? flip it in place, no re-upload (only before anything depends on the type)
+    const switchTo = g.kind === "final" ? "proof" : g.kind === "proof" && !g.locked && !sel ? "final" : null;
+    const switchBtn = switchTo
+      ? `<button class="ga-lock ga-switch" data-galswitch="${g.id}" data-to="${switchTo}">${switchTo === "proof" ? "Make these proofs to pick from" : "Make these finished edits"}</button>` : "";
+    const limitBox = g.kind === "proof" && !g.locked
+      ? `<label class="ga-lim"><span>Pick limit</span><input type="number" min="1" inputmode="numeric" id="galLim-${g.id}" data-gallimit="${g.id}" value="${lim ?? ""}" placeholder="Any" aria-label="Pick limit for ${esc(g.title)}"></label>` : "";
     const copyBtn = g.kind === "proof" && sel
       ? `<button class="ga-lock" data-copypicks="${g.id}" title="Copy the picked file names, without .jpg">Copy picks</button>` : "";
     const cells = isVideo
@@ -541,29 +569,34 @@ function galleriesCard(p) {
     return `
       <div class="ga">
         <div class="ga-head">
-          <div><span class="hud">${g.purpose === "location" ? "Location" : GAL_KIND[g.kind] || g.kind}</span><b>${esc(g.title)}</b></div>
-          <div class="ga-meta">${meta}${heldPill}${previewBtn}${copyBtn}${lockBtn}<button class="ga-del" data-galdel="${g.id}" title="Delete gallery">&#10005;</button></div>
+          <div><span class="hud">${g.purpose === "location" ? "Location" : g.kind === "proof" ? "Proofs to pick from" : g.kind === "final" ? "Finished edits" : GAL_KIND[g.kind] || g.kind}</span><b>${esc(g.title)}</b>${says ? `<p class="ga-says ga-says-${g.kind}">${esc(says)}</p>` : ""}</div>
+          <div class="ga-meta">${meta}${limitBox}${heldPill}${previewBtn}${copyBtn}${switchBtn}${lockBtn}<button class="ga-del" data-galdel="${g.id}" title="Delete gallery">&#10005;</button></div>
         </div>
         ${body}
         <div class="ga-prog" data-prog="${g.id}" hidden></div>
       </div>`;
-  }).join("") : `<p class="acard-empty">No galleries yet. Proofing lets the client pick shots; edited photos and video are for delivery.</p>`;
+  }).join("") : `<p class="acard-empty">No galleries yet. Proofs let the client pick shots; finished edits and video are for delivery.</p>`;
+  const nk = galNewKind(p.id);
+  const nt = GAL_TYPES.find((t) => t.v === nk);
 
   return `
     <section class="acard ga-card">
       <div class="acard-head"><span class="num">07</span><h3>Galleries <small>· Photos &amp; video</small></h3></div>
       ${blocks}
       <div class="ga-new">
-        <select id="galKind" aria-label="Gallery type">
-          <option value="proof">Proofing (client picks)</option>
-          <option value="final">Edited photos</option>
-          <option value="video">Video</option>
-          <option value="storyboard">Storyboard (client review)</option>
-          <option value="location">Location (client approval)</option>
-        </select>
-        <input id="galTitle" placeholder="Gallery title" aria-label="Gallery title">
-        <input id="galLimit" type="number" min="1" placeholder="Pick limit (optional)" aria-label="Pick limit">
-        <button class="btn btn-gold" id="galCreate">New gallery</button>
+        <fieldset class="ga-types">
+          <legend class="hud">New gallery: what's it for?</legend>
+          ${GAL_TYPES.map((t) => `
+          <label class="ga-type">
+            <input type="radio" name="galKind" value="${t.v}"${t.v === nk ? " checked" : ""}>
+            <b>${t.name}</b><span>${t.says}</span>
+          </label>`).join("")}
+        </fieldset>
+        <div class="ga-new-row">
+          <input id="galTitle" placeholder="Gallery title" aria-label="Gallery title">
+          <input id="galLimit" type="number" min="1" inputmode="numeric" placeholder="Pick limit (optional)" aria-label="Pick limit"${nk === "proof" ? "" : " hidden"}>
+          <button class="btn btn-gold" id="galCreate"${nt ? "" : " disabled"}>${nt ? nt.btn : "Choose what it's for"}</button>
+        </div>
       </div>
     </section>`;
 }
@@ -752,8 +785,16 @@ function wireDetail(p) {
 
   /* galleries */
   const galCreate = $("#galCreate");
+  $("#dpane").querySelectorAll('input[name="galKind"]').forEach((r) => r.addEventListener("change", () => {
+    galNew = { pid: p.id, v: r.value };
+    const t = GAL_TYPES.find((x) => x.v === r.value);
+    galCreate.disabled = false;
+    galCreate.textContent = t.btn;
+    $("#galLimit").hidden = r.value !== "proof";
+  }));
   if (galCreate) galCreate.addEventListener("click", async () => {
-    const pick = $("#galKind").value;
+    const pick = galNewKind(p.id);
+    if (!pick) { toast("Choose what the gallery is for first"); return; }
     // a location (the place every shot is built in) is reviewed like a storyboard, with its own rounds
     const kind = pick === "location" ? "storyboard" : pick;
     const title = $("#galTitle").value.trim() || (pick === "location" ? "Location" : GAL_KIND[kind]);
@@ -766,8 +807,10 @@ function wireDetail(p) {
     const { error } = await sb.from("bk_galleries").insert(row);
     if (error) { toast("Could not create gallery"); return; }
     $("#galTitle").value = ""; $("#galLimit").value = "";
+    galNew = { pid: null, v: null };
     toast(pick === "location" ? "Location draft created. Upload the images, then Send to client."
-      : kind === "storyboard" ? "Storyboard draft created. Upload the frames, then Send to client." : `${GAL_KIND[kind]} gallery created`);
+      : kind === "storyboard" ? "Storyboard draft created. Upload the frames, then Send to client." : kind === "proof" ? "Proofs gallery created. She can pick, not download."
+      : kind === "final" ? "Finished edits gallery created. She can download, not pick." : `${GAL_KIND[kind]} gallery created`);
     await load();
   });
 
@@ -816,6 +859,34 @@ function wireDetail(p) {
     if (error) { toast("Couldn't change that. Try again."); return; }
     toast(board ? (b.dataset.draft === "true" ? "Storyboard is live in the client's portal. No message was sent." : "Storyboard reopened for the client")
       : on ? "Proofing locked" : "Proofing reopened");
+    await load();
+  }));
+
+  // flip proofs <-> finished edits in place. Two taps, so a stray click can't change what she sees
+  $("#dpane").querySelectorAll("[data-galswitch]").forEach((b) => b.addEventListener("click", async () => {
+    if (b.dataset.armed !== "true") {
+      b.dataset.armed = "true";
+      b.textContent = b.dataset.to === "proof" ? "Tap again: she'll pick, not download" : "Tap again: she'll download, not pick";
+      setTimeout(() => { if (b.isConnected && b.dataset.armed === "true") { b.dataset.armed = "false"; b.textContent = b.dataset.to === "proof" ? "Make these proofs to pick from" : "Make these finished edits"; } }, 4000);
+      return;
+    }
+    const to = b.dataset.to;
+    // only an open, unpicked set may flip; the row comes back so a refused write never reads as done
+    let q = sb.from("bk_galleries").update({ kind: to }).eq("id", b.dataset.galswitch);
+    q = to === "proof" ? q.eq("kind", "final") : q.eq("kind", "proof").eq("locked", false);
+    const { data: rows, error } = await q.select("id");
+    if (error || !rows || !rows.length) { toast("Couldn't switch it. Try again."); return; }
+    toast(to === "proof" ? "Now proofs. She can pick, and downloads are off." : "Now finished edits. She can download.");
+    await load();
+  }));
+
+  $("#dpane").querySelectorAll("[data-gallimit]").forEach((inp) => inp.addEventListener("change", async () => {
+    const raw = inp.value.trim();
+    const n = raw ? Math.max(1, parseInt(raw, 10) || 0) : null;
+    const { data: rows, error } = await sb.from("bk_galleries").update({ selection_limit: n }).eq("id", inp.dataset.gallimit).select("id");
+    if (error || !rows || !rows.length) { toast("Couldn't save the pick limit"); return; }
+    toast(n ? `She can pick up to ${n}` : "No pick limit");
+    inp.blur(); // the pane holds still while a field has focus; let it redraw with the new limit
     await load();
   }));
 
