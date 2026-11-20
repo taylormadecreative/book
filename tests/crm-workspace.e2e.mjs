@@ -157,6 +157,48 @@ try {
         fullPage: true,
       });
     }
+    const moneyLine = page.locator("#openMoneyLine a");
+    await moneyLine.waitFor();
+    ok(
+      (await moneyLine.textContent()).trim() ===
+        "Open money: $2,500.00 across 1 item · 1 your move · 0 overdue",
+      "today shows the open money line",
+    );
+    await page.locator("#mainNav [data-view=money]").click();
+    await page.locator("#openMoney .money-row").filter({
+      hasText: "Synthetic Money Client",
+    }).waitFor();
+    ok(
+      new URL(page.url()).searchParams.get("view") === "money" &&
+        await page.locator("#mainNav [data-view=money]").getAttribute(
+            "aria-current",
+          ) === "page" &&
+        (await page.locator("#workspace h1").textContent()) === "Open money",
+      "nav opens the Open money screen",
+    );
+    await page.goto(base + "?view=money");
+    await page.locator("#openMoney .money-row").filter({
+      hasText: "Synthetic Money Client",
+    }).waitFor();
+    ok(
+      (await page.locator("#workspace h1").textContent()) === "Open money",
+      "a direct link lands on the Open money screen",
+    );
+    await page.locator("#mainNav [data-view=today]").click();
+    await page.waitForSelector(".task-title");
+    await page.locator("[data-task-filter]").filter({ hasText: "All open" })
+      .click();
+    await page.locator("#openMoneyLine a").waitFor({ timeout: 5000 });
+    ok(
+      (await page.locator("#openMoneyLine a").textContent()).includes(
+        "Open money: $2,500.00",
+      ),
+      "the open money line survives a task filter",
+    );
+    await page.locator("[data-task-filter]").filter({
+      hasText: "Due & overdue",
+    }).click();
+    await page.waitForSelector(".task-title");
     await page.locator("[data-task-toggle]").click();
     await page.waitForFunction(() => window.__crm.tasks[0].status === "done");
     await page.getByRole("heading", {

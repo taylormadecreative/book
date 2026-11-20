@@ -27,6 +27,7 @@ import {
   mountQuickCapture,
   receiveSharedCapture,
 } from "./crm-quick-capture.js?v=1";
+import { mountOpenMoney, mountOpenMoneyLine } from "./crm-open-money.js?v=1";
 receiveSharedCapture();
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js").catch(() => {});
@@ -478,6 +479,13 @@ async function load() {
         '<button class="btn" data-refresh>Refresh</button>',
       ) + '<div id="operationsView"></div>';
       mountTool("#operationsView", mountOperationsView, { view: state.view });
+    } else if (state.view === "money") {
+      workspace.innerHTML = head(
+        "Open money",
+        "Every proposal, contract and invoice still waiting.",
+        '<button class="btn" data-refresh>Refresh</button>',
+      ) + '<div id="openMoney"></div>';
+      mountTool("#openMoney", mountOpenMoney);
     } else if (state.view === "capture") {
       workspace.innerHTML = '<div id="captureWorkspace"></div>';
       mountTool("#captureWorkspace", mountQuickCapture, {
@@ -499,7 +507,10 @@ async function load() {
       state.health = null;
       state.healthStatus = "loading";
       state.view === "reports" ? renderReports() : renderToday();
-      if (state.view === "today") mountTool("#morningList", mountMorningList);
+      if (state.view === "today") {
+        mountTool("#morningList", mountMorningList);
+        mountTool("#openMoneyLine", mountOpenMoneyLine);
+      }
       if (state.view === "reports") {
         mountTool("#sourceReport", mountSourceReport);
       }
@@ -568,7 +579,8 @@ function renderToday() {
       day: "numeric",
     }).format(now),
     '<button class="btn" data-refresh>Refresh</button>',
-  ) + summary(d.stats || {}) + '<div id="morningList"></div>' + healthPanel() +
+  ) + summary(d.stats || {}) + '<div id="morningList"></div>' +
+    '<div id="openMoneyLine"></div>' + healthPanel() +
     `<div class="sections"><div>${
       section(
         "Next actions",
@@ -1375,7 +1387,10 @@ document.addEventListener("click", async (e) => {
     state.taskFilter = b.dataset.taskFilter;
     state.taskOffset = 0;
     await mutateButton(b, async () => {
-      if (await loadTasks()) renderToday();
+      if (await loadTasks()) {
+        renderToday();
+        mountTool("#openMoneyLine", mountOpenMoneyLine);
+      }
     });
     return;
   }
@@ -1386,7 +1401,10 @@ document.addEventListener("click", async (e) => {
       state.taskOffset + (b.dataset.taskPage === "next" ? 30 : -30),
     );
     await mutateButton(b, async () => {
-      if (await loadTasks()) renderToday();
+      if (await loadTasks()) {
+        renderToday();
+        mountTool("#openMoneyLine", mountOpenMoneyLine);
+      }
     });
     return;
   }
@@ -1813,6 +1831,7 @@ function readRoute() {
       "retainers",
       "profit",
       "capture",
+      "money",
     ].includes(q.get("view"))
     ? q.get("view")
     : "today";

@@ -181,6 +181,15 @@ export function stubCRM() {
           });
           return response({ rows, total: rows.length, counts: { overdue: rows.length, today: 0, unassigned: 0 } });
         }
+        case "bk_money_board":
+          return response({ day: "2026-11-17", show: args.p_show,
+            totals: { open_cents: 250000, items: 1, unpriced: 0, me: 1, overdue: 0, hold: 0, viewed_waiting: 0 },
+            rows: args.p_show === "closed" ? [] : [{ id: "00000000-0000-4000-8000-0000000000a1", project_id: null,
+              client_name: "Synthetic Money Client", title: "Synthetic invoice", amount_cents: 250000, step: "payment",
+              ball: "me", provider: "honeybook", link_url: "https://example.test/invoice", next_move: "Send the invoice",
+              next_move_on: "2026-11-17", staged_note: null, hold_reason: null, sent_on: null, due_on: null, notes: null,
+              view_key: "synthetic0000000000000000000000a1", view_count: 0, first_viewed_at: null, last_viewed_at: null,
+              closed_at: null, outcome: null, overdue: false, due: true, days_waiting: null, group: "me" }] });
         case "bk_crm_followup_settings":
           return response({ project_id: args.p_project, enabled: false, lead_days: [1,3,7], quote_days: [3,7,14], phase: "quote", state: "paused", step: 0 });
         case "bk_crm_source_report":
