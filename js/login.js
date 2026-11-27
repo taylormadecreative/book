@@ -6,9 +6,20 @@ const $ = (s) => document.querySelector(s);
 const GALLERY_URL =
   `${location.origin}${location.pathname.replace(/login\.html$/, "")}gallery.html`;
 
-// already signed in? go straight to the gallery
+// clients land on their gallery; the studio owner lands on the CRM
+// (any failure counts as "client", so a client never gets bounced to the CRM login)
+async function goHome() {
+  let admin = false;
+  try {
+    const { data, error } = await sb.rpc("bk_is_admin");
+    admin = !error && data === true;
+  } catch (_) {}
+  location.replace(admin ? "crm/" : "gallery.html");
+}
+
+// already signed in? go straight in
 sb.auth.getSession().then(({ data }) => {
-  if (data.session) location.replace("gallery.html");
+  if (data.session) goHome();
 });
 
 let pendingEmail = "";
@@ -51,5 +62,5 @@ $("#codeStep").addEventListener("submit", async (e) => {
   const { error } = await sb.auth.verifyOtp({ email: pendingEmail, token, type: "email" });
   btn.disabled = false; btn.textContent = "Verify & log in";
   if (error) { err.textContent = "That code didn't work. Check it or resend the link."; return; }
-  location.replace("gallery.html");
+  goHome();
 });
