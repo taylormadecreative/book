@@ -13,10 +13,25 @@ async function init() {
     location.replace("login.html");
     return;
   }
+  // the studio owner has no client gallery: send him to the CRM
+  if (await isStudioAdmin()) {
+    location.replace("crm/");
+    return;
+  }
   $("#who").textContent = (session.user.email || "").toUpperCase();
   $("#loading").hidden = true;
   $("#app").hidden = false;
   BKGallery.mount($("#galleryRoot"), { mode: "session", jwt: session.access_token });
+}
+
+// any failure counts as "client", so a client never gets bounced to the CRM login
+async function isStudioAdmin() {
+  try {
+    const { data, error } = await sb.rpc("bk_is_admin");
+    return !error && data === true;
+  } catch (_) {
+    return false;
+  }
 }
 
 $("#signout").addEventListener("click", async () => {
